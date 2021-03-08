@@ -11,4 +11,6 @@ derive_more = "0.99.11"
 druid = { version = "0.7.0", features = ["im"] }
 itertools = "0.10.0"
 num = "0.4.0"
+num-derive = "0.3.3"
+num-traits = "0.2.14"
 thiserror = "1.0.24"
