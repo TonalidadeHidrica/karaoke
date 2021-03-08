@@ -1,10 +1,6 @@
-use std::borrow::Borrow;
-
-use druid::im::Vector;
 use druid::keyboard_types::Key;
 use druid::AppLauncher;
 use druid::Color;
-use druid::Data;
 use druid::Event;
 use druid::Insets;
 use druid::KeyEvent;
@@ -13,12 +9,18 @@ use druid::RenderContext;
 use druid::Size;
 use druid::Widget;
 use druid::WindowDesc;
-use itertools::Itertools;
+use karaoke::schema::iterate_elements;
+use karaoke::schema::BeatPosition;
+use karaoke::schema::Score;
+use karaoke::schema::ScoreElement;
+use karaoke::schema::ScoreElementKind;
+use num::BigRational;
+use num::Zero;
 use thiserror::Error;
 
 fn main() -> Result<(), EditorError> {
     let score = Score::default();
-    let window = WindowDesc::new(|| ScoreEditor {});
+    let window = WindowDesc::new(|| ScoreEditor::default());
     AppLauncher::with_window(window).launch(score)?;
 
     Ok(())
@@ -30,41 +32,16 @@ pub enum EditorError {
     DruidError(#[from] PlatformError),
 }
 
-#[derive(Clone, Default, Data)]
-struct Score {
-    elements: Vector<ScoreElement>,
+struct ScoreEditor {
+    cursor_position: BeatPosition,
 }
 
-#[derive(Clone, PartialEq, Data)]
-struct ScoreElement {
-    kind: ScoreElementKind,
-}
-
-#[derive(Clone, PartialEq, Data)]
-enum ScoreElementKind {
-    Start,
-    Continued,
-    Empty,
-}
-
-struct ScoreEditor {}
-
-fn iterate_elements<'a>(
-    elements: impl Iterator<Item = impl Borrow<ScoreElement>> + 'a,
-) -> impl Iterator<Item = (usize, usize)> + 'a {
-    use ScoreElementKind::*;
-    let mut elements = elements.enumerate().peekable();
-    std::iter::from_fn(move || {
-        let (i, _) = elements.find(|(_, e)| matches!(e.borrow().kind, Start))?;
-        let j = match elements
-            .peeking_take_while(|(_, e)| matches!(e.borrow().kind, Continued))
-            .last()
-        {
-            Some((k, _)) => k + 1,
-            None => i + 1,
-        };
-        Some((i, j))
-    })
+impl Default for ScoreEditor {
+    fn default() -> Self {
+        ScoreEditor {
+            cursor_position: BigRational::zero().into(),
+        }
+    }
 }
 
 impl Widget<Score> for ScoreEditor {
@@ -79,26 +56,26 @@ impl Widget<Score> for ScoreEditor {
             Event::WindowConnected => {
                 ctx.request_focus();
             }
-            Event::KeyDown(KeyEvent { key, .. }) => match dbg!(key) {
+            Event::KeyDown(KeyEvent { key, .. }) => match key {
                 Key::Character(s) => match s.as_str() {
                     "1" => {
                         score.elements.push_back(ScoreElement {
                             kind: ScoreElementKind::Start,
                         });
                         ctx.request_paint();
-                    },
+                    }
                     "2" => {
                         score.elements.push_back(ScoreElement {
                             kind: ScoreElementKind::Continued,
                         });
                         ctx.request_paint();
-                    },
+                    }
                     "0" => {
                         score.elements.push_back(ScoreElement {
                             kind: ScoreElementKind::Empty,
                         });
                         ctx.request_paint();
-                    },
+                    }
                     _ => {}
                 },
                 Key::Backspace => {
@@ -157,26 +134,5 @@ impl Widget<Score> for ScoreEditor {
                 .to_rounded_rect(3.0);
             ctx.fill(rect, &Color::OLIVE);
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::{iterate_elements, ScoreElement, ScoreElementKind};
-    use itertools::Itertools;
-
-    #[test]
-    fn test_iterate_elements() {
-        use ScoreElementKind::*;
-        let elements = vec![
-            Start, Continued, Continued, Start, Continued, Continued, Empty, Empty, Start, Empty,
-            Start, Empty,
-        ]
-        .into_iter()
-        .map(|kind| ScoreElement { kind });
-        assert_eq!(
-            iterate_elements(elements).collect_vec(),
-            vec![(0, 3), (3, 6), (8, 9), (10, 11),]
-        );
     }
 }
