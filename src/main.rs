@@ -1,10 +1,13 @@
 use std::borrow::Borrow;
 
 use druid::im::Vector;
+use druid::keyboard_types::Key;
 use druid::AppLauncher;
 use druid::Color;
 use druid::Data;
+use druid::Event;
 use druid::Insets;
+use druid::KeyEvent;
 use druid::PlatformError;
 use druid::RenderContext;
 use druid::Size;
@@ -14,16 +17,7 @@ use itertools::Itertools;
 use thiserror::Error;
 
 fn main() -> Result<(), EditorError> {
-    let mut score = Score::default();
-    use ScoreElementKind::*;
-    score.elements = vec![
-        Start, Continued, Continued, Start, Continued, Continued, Empty, Empty, Start, Empty,
-        Start, Empty,
-    ]
-    .into_iter()
-    .map(|kind| ScoreElement { kind })
-    .collect();
-
+    let score = Score::default();
     let window = WindowDesc::new(|| ScoreEditor {});
     AppLauncher::with_window(window).launch(score)?;
 
@@ -76,12 +70,45 @@ fn iterate_elements<'a>(
 impl Widget<Score> for ScoreEditor {
     fn event(
         &mut self,
-        _ctx: &mut druid::EventCtx,
-        _event: &druid::Event,
-        _data: &mut Score,
+        ctx: &mut druid::EventCtx,
+        event: &druid::Event,
+        score: &mut Score,
         _env: &druid::Env,
     ) {
-        // dbg!(event);
+        match event {
+            Event::WindowConnected => {
+                ctx.request_focus();
+            }
+            Event::KeyDown(KeyEvent { key, .. }) => match dbg!(key) {
+                Key::Character(s) => match s.as_str() {
+                    "1" => {
+                        score.elements.push_back(ScoreElement {
+                            kind: ScoreElementKind::Start,
+                        });
+                        ctx.request_paint();
+                    },
+                    "2" => {
+                        score.elements.push_back(ScoreElement {
+                            kind: ScoreElementKind::Continued,
+                        });
+                        ctx.request_paint();
+                    },
+                    "0" => {
+                        score.elements.push_back(ScoreElement {
+                            kind: ScoreElementKind::Empty,
+                        });
+                        ctx.request_paint();
+                    },
+                    _ => {}
+                },
+                Key::Backspace => {
+                    score.elements.pop_back();
+                    ctx.request_paint();
+                }
+                _ => {}
+            },
+            _ => {}
+        }
     }
 
     fn lifecycle(
