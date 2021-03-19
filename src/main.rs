@@ -1,16 +1,19 @@
 use druid::keyboard_types::Key;
 use druid::kurbo::Line;
 use druid::widget::Flex;
+use druid::widget::Label;
 use druid::AppLauncher;
 use druid::Color;
 use druid::Data;
 use druid::Event;
 use druid::Insets;
 use druid::KeyEvent;
+use druid::Lens;
 use druid::PlatformError;
 use druid::RenderContext;
 use druid::Size;
 use druid::Widget;
+use druid::WidgetExt;
 use druid::WindowDesc;
 use itertools::iterate;
 use karaoke::schema::iterate_elements;
@@ -22,11 +25,12 @@ use karaoke::schema::ScoreElement;
 use karaoke::schema::ScoreElementKind;
 use num::BigRational;
 use num::ToPrimitive;
+use num::Zero;
 use thiserror::Error;
 
 fn main() -> Result<(), EditorError> {
     let score = ScoreEditorData::default();
-    let window = WindowDesc::new(build_toplevel_widget);
+    let window = WindowDesc::new(build_toplevel_widget).window_size((1440.0, 810.0));
     AppLauncher::with_window(window).launch(score)?;
 
     Ok(())
@@ -34,15 +38,46 @@ fn main() -> Result<(), EditorError> {
 
 fn build_toplevel_widget() -> impl Widget<ScoreEditorData> {
     let status_bar = Flex::row()
-        // .with_child(Label::new("This is a test"))
-        .main_axis_alignment(druid::widget::MainAxisAlignment::Start);
+        .with_child(Label::dynamic(|data: &ScoreEditorData, _| {
+            let pos = &data.cursor_position;
+            let (start_beat, len) = match data.score.measure_lengths.range(..pos).next_back() {
+                Some((a, b)) => (a.to_owned(), b.to_owned()),
+                None => (BeatPosition::zero(), BeatLength::four()),
+            };
+            let delta_beat = (pos - &start_beat).0;
+            let index = (&delta_beat / &len.0).trunc();
+            let beat = &delta_beat - &index * &len.0;
+            format!(
+                "{}:{}",
+                index,
+                format_beat_position(&BeatPosition::from(beat))
+            )
+        }))
+        .with_spacer(20.0)
+        .with_child(
+            Label::dynamic(|len: &BeatLength, _| {
+                format!("{}-th note", BigRational::from_integer(4.into()) / &len.0)
+            })
+            .lens(ScoreEditorData::cursor_delta),
+        )
+        .main_axis_alignment(druid::widget::MainAxisAlignment::Start)
+        .must_fill_main_axis(true)
+        .padding(5.0);
 
     Flex::column()
         .with_child(status_bar)
         .with_child(ScoreEditor::default())
 }
 
-#[derive(Clone, Data)]
+fn format_beat_position(pos: &BeatPosition) -> String {
+    let fract = match pos.0.fract() {
+        a if a == BigRational::zero() => String::new(),
+        a => format!("+{}", a),
+    };
+    format!("{}{}", pos.0.trunc(), fract)
+}
+
+#[derive(Clone, Data, Lens)]
 struct ScoreEditorData {
     cursor_position: BeatPosition,
     cursor_delta: BeatLength,

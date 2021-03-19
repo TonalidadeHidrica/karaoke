@@ -29,6 +29,10 @@ impl BeatLength {
     pub fn one() -> Self {
         Self(BigRational::one())
     }
+
+    pub fn four() -> Self {
+        Self(BigRational::from_integer(4.into()))
+    }
 }
 
 impl Add<BeatLength> for BeatPosition {
@@ -143,7 +147,7 @@ pub fn iterate_measures<'a>(
     measures: &'a OrdMap<BeatPosition, BeatLength>,
 ) -> impl Iterator<Item = (BeatPosition, BeatPosition)> + 'a {
     let mut measure_lengths = measures.iter().peekable();
-    let mut measure_length = BeatLength::from(BigRational::from_integer(4.into()));
+    let mut measure_length = BeatLength::four();
     let mut measure_start_beat = BeatPosition::zero();
 
     iter::from_fn(move || {
