@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+// use std::borrow::Borrow;
 use std::iter;
 use std::ops::Add;
 use std::ops::AddAssign;
@@ -9,7 +9,8 @@ use derive_more::From;
 use druid::im::OrdMap;
 use druid::im::Vector;
 use druid::Data;
-use itertools::Itertools;
+// use itertools::Itertools;
+use druid::im::vector;
 use num::rational::BigRational;
 use num::One;
 use num::Zero;
@@ -109,39 +110,77 @@ impl Sub<&BeatPosition> for &BeatPosition {
 
 #[derive(Clone, Default, Data)]
 pub struct Score {
-    pub elements: Vector<ScoreElement>,
+    pub tracks: Vector<Track>,
     pub measure_lengths: OrdMap<BeatPosition, BeatLength>,
+}
+
+impl Score {
+    pub fn sample_score() -> Self {
+        let elements = "
+            .....|||
+            |.||..||
+            ....<...
+        "
+        .chars()
+        .filter_map(|c| {
+            let kind = match c {
+                '.' => ScoreElementKind::Skip,
+                '|' => ScoreElementKind::Start,
+                '<' => ScoreElementKind::Stop,
+                _ => return None,
+            };
+            let length = BeatLength::from(BigRational::new(1.into(), 4.into()));
+            Some(ScoreElement { kind, length })
+        })
+        .collect();
+
+        let track = Track {
+            start_beat: BeatPosition::from(BigRational::from_integer(44.into())),
+            elements,
+        };
+        Score {
+            tracks: vector![track],
+            measure_lengths: OrdMap::new(),
+        }
+    }
+}
+
+#[derive(Clone, Data)]
+pub struct Track {
+    pub start_beat: BeatPosition,
+    pub elements: Vector<ScoreElement>,
 }
 
 #[derive(Clone, PartialEq, Data)]
 pub struct ScoreElement {
     pub kind: ScoreElementKind,
+    pub length: BeatLength,
 }
 
 #[derive(Clone, PartialEq, Data)]
 pub enum ScoreElementKind {
     Start,
-    Continued,
-    Empty,
+    Stop,
+    Skip,
 }
 
-pub fn iterate_elements<'a>(
-    elements: impl Iterator<Item = impl Borrow<ScoreElement>> + 'a,
-) -> impl Iterator<Item = (usize, usize)> + 'a {
-    use ScoreElementKind::*;
-    let mut elements = elements.enumerate().peekable();
-    iter::from_fn(move || {
-        let (i, _) = elements.find(|(_, e)| matches!(e.borrow().kind, Start))?;
-        let j = match elements
-            .peeking_take_while(|(_, e)| matches!(e.borrow().kind, Continued))
-            .last()
-        {
-            Some((k, _)) => k + 1,
-            None => i + 1,
-        };
-        Some((i, j))
-    })
-}
+// pub fn iterate_elements<'a>(
+//     elements: impl Iterator<Item = impl Borrow<ScoreElement>> + 'a,
+// ) -> impl Iterator<Item = (usize, usize)> + 'a {
+//     use ScoreElementKind::*;
+//     let mut elements = elements.enumerate().peekable();
+//     iter::from_fn(move || {
+//         let (i, _) = elements.find(|(_, e)| matches!(e.borrow().kind, Start))?;
+//         let j = match elements
+//             .peeking_take_while(|(_, e)| matches!(e.borrow().kind, Continued))
+//             .last()
+//         {
+//             Some((k, _)) => k + 1,
+//             None => i + 1,
+//         };
+//         Some((i, j))
+//     })
+// }
 
 pub fn iterate_measures<'a>(
     measures: &'a OrdMap<BeatPosition, BeatLength>,
@@ -171,31 +210,31 @@ pub fn iterate_measures<'a>(
 
 #[cfg(test)]
 mod test {
-    use super::iterate_elements;
+    // use super::iterate_elements;
     use super::iterate_measures;
     use super::BeatLength;
     use super::BeatPosition;
-    use super::ScoreElement;
-    use super::ScoreElementKind;
+    // use super::ScoreElement;
+    // use super::ScoreElementKind;
     use druid::im::ordmap;
     use itertools::iterate;
     use itertools::Itertools;
     use num::BigRational;
 
-    #[test]
-    fn test_iterate_elements() {
-        use ScoreElementKind::*;
-        let elements = vec![
-            Start, Continued, Continued, Start, Continued, Continued, Empty, Empty, Start, Empty,
-            Start, Empty,
-        ]
-        .into_iter()
-        .map(|kind| ScoreElement { kind });
-        assert_eq!(
-            iterate_elements(elements).collect_vec(),
-            vec![(0, 3), (3, 6), (8, 9), (10, 11),]
-        );
-    }
+    // #[test]
+    // fn test_iterate_elements() {
+    //     use ScoreElementKind::*;
+    //     let elements = vec![
+    //         Start, Continued, Continued, Start, Continued, Continued, Empty, Empty, Start, Empty,
+    //         Start, Empty,
+    //     ]
+    //     .into_iter()
+    //     .map(|kind| ScoreElement { kind });
+    //     assert_eq!(
+    //         iterate_elements(elements).collect_vec(),
+    //         vec![(0, 3), (3, 6), (8, 9), (10, 11),]
+    //     );
+    // }
 
     #[test]
     fn test_iterate_measures_01() {

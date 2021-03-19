@@ -11,18 +11,18 @@ use druid::KeyEvent;
 use druid::Lens;
 use druid::PlatformError;
 use druid::RenderContext;
-use druid::Size;
+// use druid::Size;
 use druid::Widget;
 use druid::WidgetExt;
 use druid::WindowDesc;
 use itertools::iterate;
-use karaoke::schema::iterate_elements;
+// use karaoke::schema::iterate_elements;
 use karaoke::schema::iterate_measures;
 use karaoke::schema::BeatLength;
 use karaoke::schema::BeatPosition;
 use karaoke::schema::Score;
-use karaoke::schema::ScoreElement;
-use karaoke::schema::ScoreElementKind;
+// use karaoke::schema::ScoreElement;
+// use karaoke::schema::ScoreElementKind;
 use num::BigRational;
 use num::ToPrimitive;
 use num::Zero;
@@ -123,30 +123,30 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             }
             Event::KeyDown(KeyEvent { key, .. }) => match key {
                 Key::Character(s) => match s.as_str() {
-                    "1" => {
-                        data.score.elements.push_back(ScoreElement {
-                            kind: ScoreElementKind::Start,
-                        });
-                        ctx.request_paint();
-                    }
-                    "2" => {
-                        data.score.elements.push_back(ScoreElement {
-                            kind: ScoreElementKind::Continued,
-                        });
-                        ctx.request_paint();
-                    }
-                    "0" => {
-                        data.score.elements.push_back(ScoreElement {
-                            kind: ScoreElementKind::Empty,
-                        });
-                        ctx.request_paint();
-                    }
+                    // "1" => {
+                    //     data.score.elements.push_back(ScoreElement {
+                    //         kind: ScoreElementKind::Start,
+                    //     });
+                    //     ctx.request_paint();
+                    // }
+                    // "2" => {
+                    //     data.score.elements.push_back(ScoreElement {
+                    //         kind: ScoreElementKind::Continued,
+                    //     });
+                    //     ctx.request_paint();
+                    // }
+                    // "0" => {
+                    //     data.score.elements.push_back(ScoreElement {
+                    //         kind: ScoreElementKind::Empty,
+                    //     });
+                    //     ctx.request_paint();
+                    // }
                     _ => {}
                 },
-                Key::Backspace => {
-                    data.score.elements.pop_back();
-                    ctx.request_paint();
-                }
+                // Key::Backspace => {
+                //     data.score.elements.pop_back();
+                //     ctx.request_paint();
+                // }
                 Key::ArrowLeft => {
                     data.cursor_position -= &data.cursor_delta;
                     if data.cursor_position < BeatPosition::zero() {
@@ -214,60 +214,58 @@ impl Widget<ScoreEditorData> for ScoreEditor {
         let draw_rect = ctx.size().to_rect().inset(insets); // .inset(status_bar_inset);
         let beat_width = 60.0;
         let line_height = 15.0;
-        let note_height = 12.0;
+        // let note_height = 12.0;
         let line_margin = 5.0;
 
-        {
-            let mut y = draw_rect.min_y();
-            let mut left_beat: BeatPosition = BeatPosition::zero();
-            let get_x =
-                |length: BeatLength| draw_rect.min_x() + length.0.to_f64().unwrap() * beat_width;
-            for (beat_start, beat_end) in iterate_measures(&data.score.measure_lengths) {
-                if &beat_end - &left_beat > BeatLength::from(BigRational::from_integer(16.into())) {
-                    let x = get_x(&beat_start - &left_beat);
-                    let line = Line::new((x, y), (x, y + line_height));
-                    ctx.stroke(line, &Color::GRAY, 2.0);
-
-                    left_beat = beat_start.clone();
-                    y += line_height + line_margin;
-                }
-
+        let mut y = draw_rect.min_y();
+        let mut left_beat: BeatPosition = BeatPosition::zero();
+        let get_x =
+            |length: BeatLength| draw_rect.min_x() + length.0.to_f64().unwrap() * beat_width;
+        for (beat_start, beat_end) in iterate_measures(&data.score.measure_lengths) {
+            if &beat_end - &left_beat > BeatLength::from(BigRational::from_integer(16.into())) {
                 let x = get_x(&beat_start - &left_beat);
                 let line = Line::new((x, y), (x, y + line_height));
                 ctx.stroke(line, &Color::GRAY, 2.0);
 
-                if &beat_start < &data.cursor_position {
-                    for b in iterate(beat_start.clone(), |x| x + &BeatLength::one())
-                        .skip(1)
-                        .take_while(|b| b < &beat_end)
-                    {
-                        let x = get_x(&b - &left_beat);
-                        let line = Line::new((x, y + 2.0), (x, y + line_height));
-                        ctx.stroke(line, &Color::GRAY, 1.0);
-                    }
-                }
+                left_beat = beat_start.clone();
+                y += line_height + line_margin;
+            }
 
-                if (&beat_start..&beat_end).contains(&&data.cursor_position) {
-                    let x = get_x(&data.cursor_position - &left_beat);
-                    let line = Line::new((x, y), (x, y + line_height));
-                    ctx.stroke(line, &Color::GREEN, 3.0);
-                }
+            let x = get_x(&beat_start - &left_beat);
+            let line = Line::new((x, y), (x, y + line_height));
+            ctx.stroke(line, &Color::GRAY, 2.0);
 
-                if &data.cursor_position <= &beat_start {
-                    break;
+            if &beat_start < &data.cursor_position {
+                for b in iterate(beat_start.clone(), |x| x + &BeatLength::one())
+                    .skip(1)
+                    .take_while(|b| b < &beat_end)
+                {
+                    let x = get_x(&b - &left_beat);
+                    let line = Line::new((x, y + 2.0), (x, y + line_height));
+                    ctx.stroke(line, &Color::GRAY, 1.0);
                 }
+            }
+
+            if (&beat_start..&beat_end).contains(&&data.cursor_position) {
+                let x = get_x(&data.cursor_position - &left_beat);
+                let line = Line::new((x, y), (x, y + line_height));
+                ctx.stroke(line, &Color::GREEN, 3.0);
+            }
+
+            if &data.cursor_position <= &beat_start {
+                break;
             }
         }
 
-        for (i, j) in iterate_elements(data.score.elements.iter()) {
-            let rect = Size::new((j - i) as f64 * beat_width, note_height)
-                .to_rect()
-                .with_origin((
-                    draw_rect.min_x() + beat_width * i as f64,
-                    draw_rect.min_y() + line_height - note_height,
-                ))
-                .to_rounded_rect(3.0);
-            ctx.fill(rect, &Color::OLIVE);
-        }
+        // for (i, j) in iterate_elements(data.score.elements.iter()) {
+        //     let rect = Size::new((j - i) as f64 * beat_width, note_height)
+        //         .to_rect()
+        //         .with_origin((
+        //             draw_rect.min_x() + beat_width * i as f64,
+        //             draw_rect.min_y() + line_height - note_height,
+        //         ))
+        //         .to_rounded_rect(3.0);
+        //     ctx.fill(rect, &Color::OLIVE);
+        // }
     }
 }
