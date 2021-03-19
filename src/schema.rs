@@ -113,37 +113,6 @@ pub struct Score {
     pub measure_lengths: OrdMap<BeatPosition, BeatLength>,
 }
 
-impl Score {
-    pub fn sample_score() -> Self {
-        let elements = "
-            .....|||
-            |.||..||
-            ....<...
-        "
-        .chars()
-        .filter_map(|c| {
-            let kind = match c {
-                '.' => ScoreElementKind::Skip,
-                '|' => ScoreElementKind::Start,
-                '<' => ScoreElementKind::Stop,
-                _ => return None,
-            };
-            let length = BeatLength::from(BigRational::new(1.into(), 2.into()));
-            Some(ScoreElement { kind, length })
-        })
-        .collect();
-
-        let track = Track {
-            start_beat: BeatPosition::from(BigRational::from_integer(44.into())),
-            elements,
-        };
-        Score {
-            tracks: vector![track],
-            measure_lengths: OrdMap::new(),
-        }
-    }
-}
-
 #[derive(Clone, Data)]
 pub struct Track {
     pub start_beat: BeatPosition,

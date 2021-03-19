@@ -12,26 +12,24 @@ use druid::Lens;
 use druid::PlatformError;
 use druid::Rect;
 use druid::RenderContext;
-// use druid::Size;
 use druid::Widget;
 use druid::WidgetExt;
 use druid::WindowDesc;
 use itertools::iterate;
-// use karaoke::schema::iterate_elements;
+use karaoke::schema::Track;
 use karaoke::schema::iterate_measures;
 use karaoke::schema::BeatLength;
 use karaoke::schema::BeatPosition;
 use karaoke::schema::Score;
-// use karaoke::schema::ScoreElement;
-// use karaoke::schema::ScoreElementKind;
+use karaoke::schema::ScoreElement;
+use karaoke::schema::ScoreElementKind;
 use num::BigRational;
 use num::ToPrimitive;
 use num::Zero;
 use thiserror::Error;
 
 fn main() -> Result<(), EditorError> {
-    let mut data = ScoreEditorData::default();
-    data.score = Score::sample_score();
+    let data = ScoreEditorData::default();
     let window = WindowDesc::new(build_toplevel_widget).window_size((1440.0, 810.0));
     AppLauncher::with_window(window).launch(data)?;
 
@@ -81,17 +79,21 @@ fn format_beat_position(pos: &BeatPosition) -> String {
 
 #[derive(Clone, Data, Lens)]
 struct ScoreEditorData {
+    score: Score,
+
     cursor_position: BeatPosition,
     cursor_delta: BeatLength,
-    score: Score,
+    selected_track: Option<usize>,
 }
 
 impl Default for ScoreEditorData {
     fn default() -> Self {
         ScoreEditorData {
+            score: Score::default(),
+
             cursor_position: BeatPosition::zero(),
             cursor_delta: BeatLength::one(),
-            score: Score::default(),
+            selected_track: None,
         }
     }
 }
@@ -125,30 +127,41 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             }
             Event::KeyDown(KeyEvent { key, .. }) => match key {
                 Key::Character(s) => match s.as_str() {
-                    // "1" => {
-                    //     data.score.elements.push_back(ScoreElement {
-                    //         kind: ScoreElementKind::Start,
-                    //     });
-                    //     ctx.request_paint();
-                    // }
-                    // "2" => {
-                    //     data.score.elements.push_back(ScoreElement {
-                    //         kind: ScoreElementKind::Continued,
-                    //     });
-                    //     ctx.request_paint();
-                    // }
-                    // "0" => {
-                    //     data.score.elements.push_back(ScoreElement {
-                    //         kind: ScoreElementKind::Empty,
-                    //     });
-                    //     ctx.request_paint();
-                    // }
+                    "1" => {
+                        append_element(data, ScoreElementKind::Start);
+                        ctx.request_paint();
+                    }
+                    "2" => {
+                        append_element(data, ScoreElementKind::Stop);
+                        ctx.request_paint();
+                    }
+                    " " => {
+                        append_element(data, ScoreElementKind::Skip);
+                        ctx.request_paint();
+                    }
+                    "a" => {
+                        data.score.tracks.push_back(Track {
+                            start_beat: data.cursor_position.to_owned(),
+                            elements: Default::default(),
+                        });
+                        data.selected_track = Some(data.score.tracks.len() - 1);
+                        ctx.request_paint();
+                    }
+                    "x" => {
+                        data.selected_track.map(|i| data.score.tracks.remove(i));
+                    }
                     _ => {}
                 },
-                // Key::Backspace => {
-                //     data.score.elements.pop_back();
-                //     ctx.request_paint();
-                // }
+                Key::Backspace => {
+                    if let Some(track) = data
+                        .selected_track
+                        .and_then(|i| data.score.tracks.get_mut(i))
+                    {
+                        track.elements.pop_back();
+                        data.cursor_position -= &data.cursor_delta;
+                    }
+                    ctx.request_paint();
+                }
                 Key::ArrowLeft => {
                     data.cursor_position -= &data.cursor_delta;
                     if data.cursor_position < BeatPosition::zero() {
@@ -230,6 +243,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             .max()
             .unwrap_or(data.cursor_position.to_owned())
             .max(data.cursor_position.to_owned());
+        let display_end_beat = display_end_beat + BeatLength::four();
 
         for (beat_start, beat_end) in iterate_measures(&data.score.measure_lengths) {
             if &beat_end - &left_beat > BeatLength::from(BigRational::from_integer(16.into())) {
@@ -241,8 +255,18 @@ impl Widget<ScoreEditorData> for ScoreEditor {
 
                 y += line_height;
                 // FIXME: Naive and inefficient!
-                for track in data.score.tracks.iter() {
-                    y += draw_track(ctx, get_x, &track, &draw_rect, y, &left_beat, &beat_start);
+                for (i, track) in data.score.tracks.iter().enumerate() {
+                    let selected = data.selected_track.map_or(false, |j| i == j);
+                    y += draw_track(
+                        ctx,
+                        get_x,
+                        &track,
+                        selected,
+                        &draw_rect,
+                        y,
+                        &left_beat,
+                        &beat_start,
+                    );
                 }
 
                 if (&left_beat..&beat_start).contains(&&data.cursor_position) {
@@ -271,8 +295,9 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             if display_end_beat <= beat_start {
                 let start_y = y;
                 y += line_height;
-                for track in data.score.tracks.iter() {
-                    y += draw_track(ctx, get_x, &track, &draw_rect, y, &left_beat, &beat_start);
+                for (i, track) in data.score.tracks.iter().enumerate() {
+                    let selected = data.selected_track.map_or(false, |j| i == j);
+                    y += draw_track(ctx, get_x, &track, selected, &draw_rect, y, &left_beat, &beat_start);
                 }
                 if (&left_beat..=&beat_start).contains(&&data.cursor_position) {
                     draw_cursor(ctx, get_x, &data.cursor_position, start_y, y, &left_beat);
@@ -283,17 +308,29 @@ impl Widget<ScoreEditorData> for ScoreEditor {
     }
 }
 
+fn append_element(data: &mut ScoreEditorData, kind: ScoreElementKind) {
+    let length = data.cursor_delta.to_owned();
+    if let Some(track) = data
+        .selected_track
+        .and_then(|i| data.score.tracks.get_mut(i))
+    {
+        track.elements.push_back(ScoreElement { kind, length });
+        data.cursor_position += &data.cursor_delta;
+    }
+}
+
 fn draw_track(
     ctx: &mut druid::PaintCtx,
     get_x: impl Fn(BeatLength) -> f64,
     track: &karaoke::schema::Track,
+    selected: bool,
     draw_rect: &Rect,
     y: f64,
     beat_left: &BeatPosition,
     beat_right: &BeatPosition,
 ) -> f64 {
-    let note_height = 18.0;
-    let note_full_height = 24.0;
+    let note_height = 24.0;
+    let note_full_height = 32.0;
 
     let track_end_beat = track.end_beat();
     if beat_right <= track.start_beat() || &track_end_beat <= beat_left {
@@ -324,11 +361,15 @@ fn draw_track(
                 get_x(&track_end_beat - beat_left)
             };
             let rect = Rect::new(min_x, rect.min_y(), max_x, rect.max_y()).to_rounded_rect(4.0);
-            ctx.fill(rect, &Color::rgb8(0, 66, 19));
-            ctx.stroke(rect, &Color::rgb8(0, 46, 13), 3.0);
+            let (fill_brush, stroke_brush) = match selected {
+                false => (Color::rgb8(0, 66, 19), Color::rgb8(0, 46, 13)),
+                true => (Color::rgb8(66, 0, 69), Color::rgb8(32, 0, 46)),
+            };
+            ctx.fill(rect, &fill_brush);
+            ctx.stroke(rect, &stroke_brush, 3.0);
         }
 
-        let rect = rect.inset(Insets::uniform_xy(0.0, -3.0));
+        let rect = rect.inset(Insets::uniform_xy(0.0, -4.0));
 
         for (note_start_beat, note_end_beat, _) in track.iterate_notes() {
             if &note_end_beat < beat_left || beat_right < &note_start_beat {
