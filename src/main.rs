@@ -398,7 +398,7 @@ fn draw_track(
             ctx.stroke(rect, &stroke_brush, 3.0);
         }
 
-        let rect = rect.inset(Insets::uniform_xy(0.0, -4.0));
+        let rect = rect.inset(Insets::uniform_xy(0.0, -6.0));
 
         for (note_start_beat, note_end_beat, _) in track.iterate_notes() {
             if &note_end_beat < beat_left || beat_right < &note_start_beat {
