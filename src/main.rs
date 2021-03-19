@@ -129,15 +129,12 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 Key::Character(s) => match s.as_str() {
                     "1" => {
                         append_element(data, ScoreElementKind::Start);
-                        ctx.request_paint();
                     }
                     "2" => {
                         append_element(data, ScoreElementKind::Stop);
-                        ctx.request_paint();
                     }
                     " " => {
                         append_element(data, ScoreElementKind::Skip);
-                        ctx.request_paint();
                     }
                     "a" => {
                         data.score.tracks.push_back(Track {
@@ -145,7 +142,29 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                             elements: Default::default(),
                         });
                         data.selected_track = Some(data.score.tracks.len() - 1);
-                        ctx.request_paint();
+                    }
+                    "t" => {
+                        let mut candidates = data
+                            .score
+                            .tracks
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(i, x)| {
+                                (x.start_beat()..=&x.end_beat())
+                                    .contains(&&data.cursor_position)
+                                    .then(|| i)
+                            })
+                            .peekable();
+                        let first = candidates.peek().copied();
+                        data.selected_track = if let Some(index) = data.selected_track {
+                            if candidates.by_ref().any(|i| i == index) {
+                                candidates.next()
+                            } else {
+                                first
+                            }
+                        } else {
+                            first
+                        }
                     }
                     "x" => {
                         data.selected_track.map(|i| data.score.tracks.remove(i));
@@ -160,18 +179,15 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                         track.elements.pop_back();
                         data.cursor_position -= &data.cursor_delta;
                     }
-                    ctx.request_paint();
                 }
                 Key::ArrowLeft => {
                     data.cursor_position -= &data.cursor_delta;
                     if data.cursor_position < BeatPosition::zero() {
                         data.cursor_position = BeatPosition::zero();
                     }
-                    ctx.request_paint();
                 }
                 Key::ArrowRight => {
                     data.cursor_position += &data.cursor_delta;
-                    ctx.request_paint();
                 }
                 Key::ArrowUp => {
                     let mut it = cursor_delta_candidates();
@@ -206,11 +222,14 @@ impl Widget<ScoreEditorData> for ScoreEditor {
 
     fn update(
         &mut self,
-        _ctx: &mut druid::UpdateCtx,
-        _old_data: &ScoreEditorData,
-        _data: &ScoreEditorData,
+        ctx: &mut druid::UpdateCtx,
+        old_data: &ScoreEditorData,
+        data: &ScoreEditorData,
         _env: &druid::Env,
     ) {
+        if !old_data.same(data) {
+            ctx.request_paint();
+        }
     }
 
     fn layout(
