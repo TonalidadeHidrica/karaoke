@@ -5,7 +5,6 @@ use std::ops::Sub;
 use std::ops::SubAssign;
 
 use derive_more::From;
-use druid::im::vector;
 use druid::im::OrdMap;
 use druid::im::Vector;
 use druid::Data;
@@ -129,7 +128,6 @@ impl Track {
             .iter()
             .map(|x| &x.length)
             .fold(self.start_beat.to_owned(), |x, y| &x + y)
-            .to_owned()
     }
 }
 
@@ -186,9 +184,9 @@ impl Track {
     }
 }
 
-pub fn iterate_measures<'a>(
-    measures: &'a OrdMap<BeatPosition, BeatLength>,
-) -> impl Iterator<Item = (BeatPosition, BeatPosition)> + 'a {
+pub fn iterate_measures(
+    measures: &OrdMap<BeatPosition, BeatLength>,
+) -> impl Iterator<Item = (BeatPosition, BeatPosition)> + '_ {
     let mut measure_lengths = measures.iter().peekable();
     let mut measure_length = BeatLength::four();
     let mut measure_start_beat = BeatPosition::zero();
@@ -197,12 +195,12 @@ pub fn iterate_measures<'a>(
         let mut measure_end_beat = &measure_start_beat + &measure_length;
         if let Some((next_measure_beat, next_measure_length)) = measure_lengths.peek() {
             if next_measure_beat == &&measure_start_beat {
-                measure_length = next_measure_length.clone().to_owned();
+                measure_length = (*next_measure_length).to_owned();
                 measure_end_beat = &measure_start_beat + &measure_length;
                 measure_lengths.next();
             } else if next_measure_beat < &&measure_end_beat {
-                measure_length = next_measure_length.clone().to_owned();
-                measure_end_beat = next_measure_beat.clone().to_owned();
+                measure_length = (*next_measure_length).to_owned();
+                measure_end_beat = (*next_measure_beat).to_owned();
                 measure_lengths.next();
             }
         }

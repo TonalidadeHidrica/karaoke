@@ -16,13 +16,13 @@ use druid::Widget;
 use druid::WidgetExt;
 use druid::WindowDesc;
 use itertools::iterate;
-use karaoke::schema::Track;
 use karaoke::schema::iterate_measures;
 use karaoke::schema::BeatLength;
 use karaoke::schema::BeatPosition;
 use karaoke::schema::Score;
 use karaoke::schema::ScoreElement;
 use karaoke::schema::ScoreElementKind;
+use karaoke::schema::Track;
 use num::BigRational;
 use num::ToPrimitive;
 use num::Zero;
@@ -241,7 +241,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             .iter()
             .map(|x| x.end_beat())
             .max()
-            .unwrap_or(data.cursor_position.to_owned())
+            .unwrap_or_else(|| data.cursor_position.to_owned())
             .max(data.cursor_position.to_owned());
         let display_end_beat = display_end_beat + BeatLength::four();
 
@@ -297,7 +297,16 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 y += line_height;
                 for (i, track) in data.score.tracks.iter().enumerate() {
                     let selected = data.selected_track.map_or(false, |j| i == j);
-                    y += draw_track(ctx, get_x, &track, selected, &draw_rect, y, &left_beat, &beat_start);
+                    y += draw_track(
+                        ctx,
+                        get_x,
+                        &track,
+                        selected,
+                        &draw_rect,
+                        y,
+                        &left_beat,
+                        &beat_start,
+                    );
                 }
                 if (&left_beat..=&beat_start).contains(&&data.cursor_position) {
                     draw_cursor(ctx, get_x, &data.cursor_position, start_y, y, &left_beat);
@@ -319,6 +328,7 @@ fn append_element(data: &mut ScoreEditorData, kind: ScoreElementKind) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_track(
     ctx: &mut druid::PaintCtx,
     get_x: impl Fn(BeatLength) -> f64,
