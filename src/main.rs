@@ -1,18 +1,26 @@
-use druid::WidgetPod;
 use druid::keyboard_types::Key;
 use druid::kurbo::Line;
+use druid::widget::Button;
+use druid::widget::Controller;
 use druid::widget::Flex;
 use druid::widget::Label;
+use druid::widget::TextBox;
 use druid::AppLauncher;
 use druid::Color;
 use druid::Data;
+use druid::Env;
 use druid::Event;
+use druid::EventCtx;
 use druid::Insets;
 use druid::KeyEvent;
 use druid::PlatformError;
 use druid::RenderContext;
+use druid::Selector;
+use druid::SingleUse;
 use druid::Size;
 use druid::Widget;
+use druid::WidgetExt;
+use druid::WidgetPod;
 use druid::WindowDesc;
 use itertools::iterate;
 use karaoke::schema::iterate_elements;
@@ -28,10 +36,47 @@ use thiserror::Error;
 
 fn main() -> Result<(), EditorError> {
     let score = Score::default();
-    let window = WindowDesc::new(|| ScoreEditor::default());
+    let window = WindowDesc::new(build_toplevel_widget);
     AppLauncher::with_window(window).launch(score)?;
 
     Ok(())
+}
+
+fn build_toplevel_widget() -> impl Widget<Score> {
+    let status_bar = Flex::row()
+        .with_child(Label::new("This is a test"))
+        .with_child(Button::new("Press me"))
+        .main_axis_alignment(druid::widget::MainAxisAlignment::Start);
+
+    Flex::column()
+        .with_child(status_bar)
+        .with_child(ScoreEditor::default())
+}
+
+const LABEL_STRING_SELECTOR: Selector<SingleUse<String>> =
+    Selector::new("karaoke::label_string_selector");
+
+struct LabelController {
+    text: String,
+}
+
+impl <T: Data> Controller<T, Label<T>> for LabelController {
+    fn event(
+        &mut self,
+        child: &mut Label<T>,
+        ctx: &mut EventCtx,
+        event: &Event,
+        data: &mut T,
+        env: &Env,
+    ) {
+        if let Event::Command(cmd) = event {
+            if let Some(data) = cmd.get(LABEL_STRING_SELECTOR).and_then(SingleUse::take) {
+                self.text = data;
+                return;
+            }
+        }
+        child.event(ctx, event, data, env);
+    }
 }
 
 #[derive(Debug, Error)]
@@ -43,7 +88,6 @@ pub enum EditorError {
 struct ScoreEditor {
     cursor_position: BeatPosition,
     cursor_delta: BeatLength,
-
     // status_bar: WidgetPod<StatusBarData, Box<dyn Widget<StatusBarData>>>,
 }
 
@@ -52,7 +96,6 @@ impl Default for ScoreEditor {
         ScoreEditor {
             cursor_position: BeatPosition::zero(),
             cursor_delta: BeatLength::one(),
-
             // status_bar: WidgetPod::new(Box::new(build_status_bar())),
         }
     }
@@ -63,7 +106,7 @@ impl Default for ScoreEditor {
 //     cursor_position: String,
 //     cursor_delta: String,
 // }
-// 
+//
 // fn build_status_bar() -> impl Widget<StatusBarData> {
 //     Flex::row().with_child(Label::new("Hoge"))
 // }
@@ -176,20 +219,20 @@ impl Widget<Score> for ScoreEditor {
 
     fn paint(&mut self, ctx: &mut druid::PaintCtx, data: &Score, _env: &druid::Env) {
         let insets = Insets::uniform(-8.0);
-        let status_bar_height = 24.0;
-        let status_bar_inset = Insets::new(0.0, -status_bar_height, 0.0, 0.0);
-        let draw_rect = ctx.size().to_rect().inset(insets).inset(status_bar_inset);
+        // let status_bar_height = 24.0;
+        // let status_bar_inset = Insets::new(0.0, -status_bar_height, 0.0, 0.0);
+        let draw_rect = ctx.size().to_rect().inset(insets); // .inset(status_bar_inset);
         let beat_width = 60.0;
         let line_height = 15.0;
         let note_height = 12.0;
         let line_margin = 5.0;
 
-        let rect = {
-            let mut r = ctx.size();
-            r.height = status_bar_height;
-            r.to_rect()
-        };
-        ctx.fill(&rect, &Color::BLACK);
+        // let rect = {
+        //     let mut r = ctx.size();
+        //     r.height = status_bar_height;
+        //     r.to_rect()
+        // };
+        // ctx.fill(&rect, &Color::BLACK);
 
         {
             let mut y = draw_rect.min_y();
