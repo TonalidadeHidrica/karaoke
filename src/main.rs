@@ -211,20 +211,11 @@ impl Widget<ScoreEditorData> for ScoreEditor {
 
     fn paint(&mut self, ctx: &mut druid::PaintCtx, data: &ScoreEditorData, _env: &druid::Env) {
         let insets = Insets::uniform(-8.0);
-        // let status_bar_height = 24.0;
-        // let status_bar_inset = Insets::new(0.0, -status_bar_height, 0.0, 0.0);
         let draw_rect = ctx.size().to_rect().inset(insets); // .inset(status_bar_inset);
         let beat_width = 60.0;
         let line_height = 15.0;
         let note_height = 12.0;
         let line_margin = 5.0;
-
-        // let rect = {
-        //     let mut r = ctx.size();
-        //     r.height = status_bar_height;
-        //     r.to_rect()
-        // };
-        // ctx.fill(&rect, &Color::BLACK);
 
         {
             let mut y = draw_rect.min_y();
