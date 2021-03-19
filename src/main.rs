@@ -1,26 +1,16 @@
 use druid::keyboard_types::Key;
 use druid::kurbo::Line;
-use druid::widget::Button;
-use druid::widget::Controller;
 use druid::widget::Flex;
-use druid::widget::Label;
-use druid::widget::TextBox;
 use druid::AppLauncher;
 use druid::Color;
 use druid::Data;
-use druid::Env;
 use druid::Event;
-use druid::EventCtx;
 use druid::Insets;
 use druid::KeyEvent;
 use druid::PlatformError;
 use druid::RenderContext;
-use druid::Selector;
-use druid::SingleUse;
 use druid::Size;
 use druid::Widget;
-use druid::WidgetExt;
-use druid::WidgetPod;
 use druid::WindowDesc;
 use itertools::iterate;
 use karaoke::schema::iterate_elements;
@@ -35,17 +25,16 @@ use num::ToPrimitive;
 use thiserror::Error;
 
 fn main() -> Result<(), EditorError> {
-    let score = Score::default();
+    let score = ScoreEditorData::default();
     let window = WindowDesc::new(build_toplevel_widget);
     AppLauncher::with_window(window).launch(score)?;
 
     Ok(())
 }
 
-fn build_toplevel_widget() -> impl Widget<Score> {
+fn build_toplevel_widget() -> impl Widget<ScoreEditorData> {
     let status_bar = Flex::row()
-        .with_child(Label::new("This is a test"))
-        .with_child(Button::new("Press me"))
+        // .with_child(Label::new("This is a test"))
         .main_axis_alignment(druid::widget::MainAxisAlignment::Start);
 
     Flex::column()
@@ -53,29 +42,20 @@ fn build_toplevel_widget() -> impl Widget<Score> {
         .with_child(ScoreEditor::default())
 }
 
-const LABEL_STRING_SELECTOR: Selector<SingleUse<String>> =
-    Selector::new("karaoke::label_string_selector");
-
-struct LabelController {
-    text: String,
+#[derive(Clone, Data)]
+struct ScoreEditorData {
+    cursor_position: BeatPosition,
+    cursor_delta: BeatLength,
+    score: Score,
 }
 
-impl <T: Data> Controller<T, Label<T>> for LabelController {
-    fn event(
-        &mut self,
-        child: &mut Label<T>,
-        ctx: &mut EventCtx,
-        event: &Event,
-        data: &mut T,
-        env: &Env,
-    ) {
-        if let Event::Command(cmd) = event {
-            if let Some(data) = cmd.get(LABEL_STRING_SELECTOR).and_then(SingleUse::take) {
-                self.text = data;
-                return;
-            }
+impl Default for ScoreEditorData {
+    fn default() -> Self {
+        ScoreEditorData {
+            cursor_position: BeatPosition::zero(),
+            cursor_delta: BeatLength::one(),
+            score: Score::default(),
         }
-        child.event(ctx, event, data, env);
     }
 }
 
@@ -85,31 +65,8 @@ pub enum EditorError {
     DruidError(#[from] PlatformError),
 }
 
-struct ScoreEditor {
-    cursor_position: BeatPosition,
-    cursor_delta: BeatLength,
-    // status_bar: WidgetPod<StatusBarData, Box<dyn Widget<StatusBarData>>>,
-}
-
-impl Default for ScoreEditor {
-    fn default() -> Self {
-        ScoreEditor {
-            cursor_position: BeatPosition::zero(),
-            cursor_delta: BeatLength::one(),
-            // status_bar: WidgetPod::new(Box::new(build_status_bar())),
-        }
-    }
-}
-
-// #[derive(Clone, Data)]
-// struct StatusBarData {
-//     cursor_position: String,
-//     cursor_delta: String,
-// }
-//
-// fn build_status_bar() -> impl Widget<StatusBarData> {
-//     Flex::row().with_child(Label::new("Hoge"))
-// }
+#[derive(Default)]
+struct ScoreEditor {}
 
 fn cursor_delta_candidates() -> impl DoubleEndedIterator<Item = BeatLength> {
     vec![4, 8, 12, 16, 24, 32]
@@ -117,12 +74,12 @@ fn cursor_delta_candidates() -> impl DoubleEndedIterator<Item = BeatLength> {
         .map(|x| BeatLength::from(BigRational::new(4.into(), x.into())))
 }
 
-impl Widget<Score> for ScoreEditor {
+impl Widget<ScoreEditorData> for ScoreEditor {
     fn event(
         &mut self,
         ctx: &mut druid::EventCtx,
         event: &druid::Event,
-        score: &mut Score,
+        data: &mut ScoreEditorData,
         _env: &druid::Env,
     ) {
         match event {
@@ -132,19 +89,19 @@ impl Widget<Score> for ScoreEditor {
             Event::KeyDown(KeyEvent { key, .. }) => match key {
                 Key::Character(s) => match s.as_str() {
                     "1" => {
-                        score.elements.push_back(ScoreElement {
+                        data.score.elements.push_back(ScoreElement {
                             kind: ScoreElementKind::Start,
                         });
                         ctx.request_paint();
                     }
                     "2" => {
-                        score.elements.push_back(ScoreElement {
+                        data.score.elements.push_back(ScoreElement {
                             kind: ScoreElementKind::Continued,
                         });
                         ctx.request_paint();
                     }
                     "0" => {
-                        score.elements.push_back(ScoreElement {
+                        data.score.elements.push_back(ScoreElement {
                             kind: ScoreElementKind::Empty,
                         });
                         ctx.request_paint();
@@ -152,33 +109,33 @@ impl Widget<Score> for ScoreEditor {
                     _ => {}
                 },
                 Key::Backspace => {
-                    score.elements.pop_back();
+                    data.score.elements.pop_back();
                     ctx.request_paint();
                 }
                 Key::ArrowLeft => {
-                    self.cursor_position -= &self.cursor_delta;
-                    if self.cursor_position < BeatPosition::zero() {
-                        self.cursor_position = BeatPosition::zero();
+                    data.cursor_position -= &data.cursor_delta;
+                    if data.cursor_position < BeatPosition::zero() {
+                        data.cursor_position = BeatPosition::zero();
                     }
                     ctx.request_paint();
                 }
                 Key::ArrowRight => {
-                    self.cursor_position += &self.cursor_delta;
+                    data.cursor_position += &data.cursor_delta;
                     ctx.request_paint();
                 }
                 Key::ArrowUp => {
                     let mut it = cursor_delta_candidates();
                     let first = it.next().unwrap();
-                    self.cursor_delta = it
-                        .take_while(|x| x > &self.cursor_delta)
+                    data.cursor_delta = it
+                        .take_while(|x| x > &data.cursor_delta)
                         .last()
                         .unwrap_or(first);
                 }
                 Key::ArrowDown => {
                     let mut it = cursor_delta_candidates().rev();
                     let first = it.next().unwrap();
-                    self.cursor_delta = it
-                        .take_while(|x| x < &self.cursor_delta)
+                    data.cursor_delta = it
+                        .take_while(|x| x < &data.cursor_delta)
                         .last()
                         .unwrap_or(first);
                 }
@@ -192,7 +149,7 @@ impl Widget<Score> for ScoreEditor {
         &mut self,
         _ctx: &mut druid::LifeCycleCtx,
         _event: &druid::LifeCycle,
-        _data: &Score,
+        _data: &ScoreEditorData,
         _env: &druid::Env,
     ) {
     }
@@ -200,8 +157,8 @@ impl Widget<Score> for ScoreEditor {
     fn update(
         &mut self,
         _ctx: &mut druid::UpdateCtx,
-        _old_data: &Score,
-        _data: &Score,
+        _old_data: &ScoreEditorData,
+        _data: &ScoreEditorData,
         _env: &druid::Env,
     ) {
     }
@@ -210,14 +167,14 @@ impl Widget<Score> for ScoreEditor {
         &mut self,
         _ctx: &mut druid::LayoutCtx,
         bc: &druid::BoxConstraints,
-        _data: &Score,
+        _data: &ScoreEditorData,
         _env: &druid::Env,
     ) -> druid::Size {
         // TODO example says that we have to check if constraints is bounded
         bc.max()
     }
 
-    fn paint(&mut self, ctx: &mut druid::PaintCtx, data: &Score, _env: &druid::Env) {
+    fn paint(&mut self, ctx: &mut druid::PaintCtx, data: &ScoreEditorData, _env: &druid::Env) {
         let insets = Insets::uniform(-8.0);
         // let status_bar_height = 24.0;
         // let status_bar_inset = Insets::new(0.0, -status_bar_height, 0.0, 0.0);
@@ -239,7 +196,7 @@ impl Widget<Score> for ScoreEditor {
             let mut left_beat: BeatPosition = BeatPosition::zero();
             let get_x =
                 |length: BeatLength| draw_rect.min_x() + length.0.to_f64().unwrap() * beat_width;
-            for (beat_start, beat_end) in iterate_measures(&data.measure_lengths) {
+            for (beat_start, beat_end) in iterate_measures(&data.score.measure_lengths) {
                 if &beat_end - &left_beat > BeatLength::from(BigRational::from_integer(16.into())) {
                     let x = get_x(&beat_start - &left_beat);
                     let line = Line::new((x, y), (x, y + line_height));
@@ -253,7 +210,7 @@ impl Widget<Score> for ScoreEditor {
                 let line = Line::new((x, y), (x, y + line_height));
                 ctx.stroke(line, &Color::GRAY, 2.0);
 
-                if &beat_start < &self.cursor_position {
+                if &beat_start < &data.cursor_position {
                     for b in iterate(beat_start.clone(), |x| x + &BeatLength::one())
                         .skip(1)
                         .take_while(|b| b < &beat_end)
@@ -264,19 +221,19 @@ impl Widget<Score> for ScoreEditor {
                     }
                 }
 
-                if (&beat_start..&beat_end).contains(&&self.cursor_position) {
-                    let x = get_x(&self.cursor_position - &left_beat);
+                if (&beat_start..&beat_end).contains(&&data.cursor_position) {
+                    let x = get_x(&data.cursor_position - &left_beat);
                     let line = Line::new((x, y), (x, y + line_height));
                     ctx.stroke(line, &Color::GREEN, 3.0);
                 }
 
-                if &self.cursor_position <= &beat_start {
+                if &data.cursor_position <= &beat_start {
                     break;
                 }
             }
         }
 
-        for (i, j) in iterate_elements(data.elements.iter()) {
+        for (i, j) in iterate_elements(data.score.elements.iter()) {
             let rect = Size::new((j - i) as f64 * beat_width, note_height)
                 .to_rect()
                 .with_origin((
