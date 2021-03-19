@@ -10,6 +10,7 @@ use druid::Insets;
 use druid::KeyEvent;
 use druid::Lens;
 use druid::PlatformError;
+use druid::Rect;
 use druid::RenderContext;
 // use druid::Size;
 use druid::Widget;
@@ -29,9 +30,10 @@ use num::Zero;
 use thiserror::Error;
 
 fn main() -> Result<(), EditorError> {
-    let score = ScoreEditorData::default();
+    let mut data = ScoreEditorData::default();
+    data.score = Score::sample_score();
     let window = WindowDesc::new(build_toplevel_widget).window_size((1440.0, 810.0));
-    AppLauncher::with_window(window).launch(score)?;
+    AppLauncher::with_window(window).launch(data)?;
 
     Ok(())
 }
@@ -214,28 +216,48 @@ impl Widget<ScoreEditorData> for ScoreEditor {
         let draw_rect = ctx.size().to_rect().inset(insets); // .inset(status_bar_inset);
         let beat_width = 60.0;
         let line_height = 15.0;
-        // let note_height = 12.0;
         let line_margin = 5.0;
 
         let mut y = draw_rect.min_y();
         let mut left_beat: BeatPosition = BeatPosition::zero();
         let get_x =
             |length: BeatLength| draw_rect.min_x() + length.0.to_f64().unwrap() * beat_width;
+        let display_end_beat = data
+            .score
+            .tracks
+            .iter()
+            .map(|x| x.end_beat())
+            .max()
+            .unwrap_or(data.cursor_position.to_owned())
+            .max(data.cursor_position.to_owned());
+
         for (beat_start, beat_end) in iterate_measures(&data.score.measure_lengths) {
             if &beat_end - &left_beat > BeatLength::from(BigRational::from_integer(16.into())) {
                 let x = get_x(&beat_start - &left_beat);
                 let line = Line::new((x, y), (x, y + line_height));
                 ctx.stroke(line, &Color::GRAY, 2.0);
 
+                let start_y = y;
+
+                y += line_height;
+                // FIXME: Naive and inefficient!
+                for track in data.score.tracks.iter() {
+                    y += draw_track(ctx, get_x, &track, &draw_rect, y, &left_beat, &beat_start);
+                }
+
+                if (&left_beat..&beat_start).contains(&&data.cursor_position) {
+                    draw_cursor(ctx, get_x, &data.cursor_position, start_y, y, &left_beat);
+                }
+
+                y += line_margin;
                 left_beat = beat_start.clone();
-                y += line_height + line_margin;
             }
 
             let x = get_x(&beat_start - &left_beat);
             let line = Line::new((x, y), (x, y + line_height));
             ctx.stroke(line, &Color::GRAY, 2.0);
 
-            if &beat_start < &data.cursor_position {
+            if beat_start < display_end_beat {
                 for b in iterate(beat_start.clone(), |x| x + &BeatLength::one())
                     .skip(1)
                     .take_while(|b| b < &beat_end)
@@ -246,26 +268,95 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 }
             }
 
-            if (&beat_start..&beat_end).contains(&&data.cursor_position) {
-                let x = get_x(&data.cursor_position - &left_beat);
-                let line = Line::new((x, y), (x, y + line_height));
-                ctx.stroke(line, &Color::GREEN, 3.0);
-            }
-
-            if &data.cursor_position <= &beat_start {
+            if display_end_beat <= beat_start {
+                let start_y = y;
+                y += line_height;
+                for track in data.score.tracks.iter() {
+                    y += draw_track(ctx, get_x, &track, &draw_rect, y, &left_beat, &beat_start);
+                }
+                if (&left_beat..=&beat_start).contains(&&data.cursor_position) {
+                    draw_cursor(ctx, get_x, &data.cursor_position, start_y, y, &left_beat);
+                }
                 break;
             }
         }
-
-        // for (i, j) in iterate_elements(data.score.elements.iter()) {
-        //     let rect = Size::new((j - i) as f64 * beat_width, note_height)
-        //         .to_rect()
-        //         .with_origin((
-        //             draw_rect.min_x() + beat_width * i as f64,
-        //             draw_rect.min_y() + line_height - note_height,
-        //         ))
-        //         .to_rounded_rect(3.0);
-        //     ctx.fill(rect, &Color::OLIVE);
-        // }
     }
+}
+
+fn draw_track(
+    ctx: &mut druid::PaintCtx,
+    get_x: impl Fn(BeatLength) -> f64,
+    track: &karaoke::schema::Track,
+    draw_rect: &Rect,
+    y: f64,
+    beat_left: &BeatPosition,
+    beat_right: &BeatPosition,
+) -> f64 {
+    let note_height = 18.0;
+    let note_full_height = 24.0;
+
+    let track_end_beat = track.end_beat();
+    if beat_right <= track.start_beat() || &track_end_beat <= beat_left {
+        return 0.0;
+    }
+    ctx.with_save(|ctx| {
+        let rect = Rect::new(
+            draw_rect.min_x(),
+            y,
+            get_x(beat_right - beat_left),
+            y + note_full_height,
+        );
+        ctx.clip(rect);
+        let rect = rect.inset(Insets::uniform_xy(
+            0.0,
+            (note_height - note_full_height) / 2.0,
+        ));
+
+        {
+            let min_x = if track.start_beat() < beat_left {
+                rect.min_x() - 20.0
+            } else {
+                get_x(track.start_beat() - beat_left)
+            };
+            let max_x = if beat_right < &track_end_beat {
+                rect.max_x() + 20.0
+            } else {
+                get_x(&track_end_beat - beat_left)
+            };
+            let rect = Rect::new(min_x, rect.min_y(), max_x, rect.max_y()).to_rounded_rect(4.0);
+            ctx.fill(rect, &Color::rgb8(0, 66, 19));
+            ctx.stroke(rect, &Color::rgb8(0, 46, 13), 3.0);
+        }
+
+        let rect = rect.inset(Insets::uniform_xy(0.0, -3.0));
+
+        for (note_start_beat, note_end_beat, _) in track.iterate_notes() {
+            if &note_end_beat < beat_left || beat_right < &note_start_beat {
+                continue;
+            }
+            let rect = Rect::new(
+                get_x(&note_start_beat - beat_left),
+                rect.min_y(),
+                get_x(&note_end_beat - beat_left),
+                rect.max_y(),
+            )
+            .to_rounded_rect(5.0);
+            ctx.fill(rect, &Color::rgb8(172, 255, 84));
+        }
+    });
+
+    note_full_height
+}
+
+fn draw_cursor(
+    ctx: &mut druid::PaintCtx,
+    get_x: impl Fn(BeatLength) -> f64,
+    cursor_position: &BeatPosition,
+    min_y: f64,
+    max_y: f64,
+    beat_left: &BeatPosition,
+) {
+    let x = get_x(cursor_position - beat_left);
+    let line = Line::new((x, min_y), (x, max_y));
+    ctx.stroke(line, &Color::GREEN, 3.0);
 }

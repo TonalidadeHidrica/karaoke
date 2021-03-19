@@ -1,4 +1,3 @@
-// use std::borrow::Borrow;
 use std::iter;
 use std::ops::Add;
 use std::ops::AddAssign;
@@ -6,11 +5,11 @@ use std::ops::Sub;
 use std::ops::SubAssign;
 
 use derive_more::From;
+use druid::im::vector;
 use druid::im::OrdMap;
 use druid::im::Vector;
 use druid::Data;
-// use itertools::Itertools;
-use druid::im::vector;
+use itertools::Itertools;
 use num::rational::BigRational;
 use num::One;
 use num::Zero;
@@ -129,7 +128,7 @@ impl Score {
                 '<' => ScoreElementKind::Stop,
                 _ => return None,
             };
-            let length = BeatLength::from(BigRational::new(1.into(), 4.into()));
+            let length = BeatLength::from(BigRational::new(1.into(), 2.into()));
             Some(ScoreElement { kind, length })
         })
         .collect();
@@ -151,36 +150,72 @@ pub struct Track {
     pub elements: Vector<ScoreElement>,
 }
 
+impl Track {
+    pub fn start_beat(&self) -> &BeatPosition {
+        &self.start_beat
+    }
+
+    pub fn end_beat(&self) -> BeatPosition {
+        self.elements
+            .iter()
+            .map(|x| &x.length)
+            .fold(self.start_beat.to_owned(), |x, y| &x + y)
+            .to_owned()
+    }
+}
+
 #[derive(Clone, PartialEq, Data)]
 pub struct ScoreElement {
     pub kind: ScoreElementKind,
     pub length: BeatLength,
 }
 
-#[derive(Clone, PartialEq, Data)]
+#[derive(Clone, Copy, PartialEq, Data)]
 pub enum ScoreElementKind {
     Start,
     Stop,
     Skip,
 }
 
-// pub fn iterate_elements<'a>(
-//     elements: impl Iterator<Item = impl Borrow<ScoreElement>> + 'a,
-// ) -> impl Iterator<Item = (usize, usize)> + 'a {
-//     use ScoreElementKind::*;
-//     let mut elements = elements.enumerate().peekable();
-//     iter::from_fn(move || {
-//         let (i, _) = elements.find(|(_, e)| matches!(e.borrow().kind, Start))?;
-//         let j = match elements
-//             .peeking_take_while(|(_, e)| matches!(e.borrow().kind, Continued))
-//             .last()
-//         {
-//             Some((k, _)) => k + 1,
-//             None => i + 1,
-//         };
-//         Some((i, j))
-//     })
-// }
+impl Track {
+    pub fn iterate_notes(
+        &self,
+    ) -> impl Iterator<Item = (BeatPosition, BeatPosition, &ScoreElement)> {
+        use ScoreElementKind::*;
+        let mut beat = self.start_beat.to_owned();
+        let mut elements = self
+            .elements
+            .iter()
+            .map(move |e| {
+                let new_beat = &beat + &e.length;
+                let old_beat = std::mem::replace(&mut beat, new_beat);
+                (old_beat, e)
+            })
+            .peekable();
+
+        iter::from_fn(move || {
+            let (beat, note) = elements.find(|(_, e)| matches!(e.kind, Start))?;
+            let end_beat = match elements
+                .peeking_take_while(|(_, e)| matches!(e.kind, Skip))
+                .last()
+            {
+                Some((end_beat, end_note)) => &end_beat + &end_note.length,
+                None => &beat + &note.length,
+            };
+            Some((beat, end_beat, note))
+
+            // let (i, _) = elements.find(|e| matches!(e.borrow().kind, Start))?;
+            // let j = match elements
+            //     .peeking_take_while(|(_, e)| matches!(e.borrow().kind, Continued))
+            //     .last()
+            // {
+            //     Some((k, _)) => k + 1,
+            //     None => i + 1,
+            // };
+            // Some((i, j))
+        })
+    }
+}
 
 pub fn iterate_measures<'a>(
     measures: &'a OrdMap<BeatPosition, BeatLength>,
