@@ -112,7 +112,7 @@ pub struct Score {
     pub measure_lengths: OrdMap<BeatPosition, BeatLength>,
 }
 
-#[derive(Clone, Data)]
+#[derive(Clone, Debug, Data)]
 pub struct Track {
     pub start_beat: BeatPosition,
     pub elements: Vector<ScoreElement>,
@@ -131,13 +131,13 @@ impl Track {
     }
 }
 
-#[derive(Clone, PartialEq, Data)]
+#[derive(Clone, PartialEq, Debug, Data)]
 pub struct ScoreElement {
     pub kind: ScoreElementKind,
     pub length: BeatLength,
 }
 
-#[derive(Clone, Copy, PartialEq, Data)]
+#[derive(Clone, Copy, PartialEq, Debug, Data)]
 pub enum ScoreElementKind {
     Start,
     Stop,
