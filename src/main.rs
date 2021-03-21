@@ -16,6 +16,7 @@ use druid::Widget;
 use druid::WidgetExt;
 use druid::WindowDesc;
 use itertools::iterate;
+use karaoke::measure_dialog::build_measure_dialog;
 use karaoke::schema::iterate_measures;
 use karaoke::schema::BeatLength;
 use karaoke::schema::BeatPosition;
@@ -31,7 +32,9 @@ use thiserror::Error;
 fn main() -> Result<(), EditorError> {
     let data = ScoreEditorData::default();
     let window = WindowDesc::new(build_toplevel_widget).window_size((1440.0, 810.0));
-    AppLauncher::with_window(window).launch(data)?;
+    AppLauncher::with_window(window)
+        .use_simple_logger()
+        .launch(data)?;
 
     Ok(())
 }
@@ -77,7 +80,7 @@ fn format_beat_position(pos: &BeatPosition) -> String {
     format!("{}{}", pos.0.trunc(), fract)
 }
 
-#[derive(Clone, Data, Lens)]
+#[derive(Clone, Debug, Data, Lens)]
 struct ScoreEditorData {
     score: Score,
 
@@ -168,6 +171,10 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     }
                     "x" => {
                         data.selected_track.map(|i| data.score.tracks.remove(i));
+                    }
+                    "m" => {
+                        let window_desc = WindowDesc::new(build_measure_dialog::<ScoreEditorData>);
+                        ctx.new_window(window_desc);
                     }
                     _ => {}
                 },

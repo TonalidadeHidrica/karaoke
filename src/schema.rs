@@ -106,7 +106,7 @@ impl Sub<&BeatPosition> for &BeatPosition {
     }
 }
 
-#[derive(Clone, Default, Data)]
+#[derive(Clone, Default, Debug, Data)]
 pub struct Score {
     pub tracks: Vector<Track>,
     pub measure_lengths: OrdMap<BeatPosition, BeatLength>,
