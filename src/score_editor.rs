@@ -108,7 +108,7 @@ fn cursor_delta_candidates() -> impl DoubleEndedIterator<Item = BeatLength> {
 #[derive(Debug)]
 pub struct SetMeasureLengthCommand {
     pub position: BeatPosition,
-    pub measure_length: MeasureLength,
+    pub measure_length: Option<MeasureLength>,
 }
 
 pub const EDIT_MEAUSRE_LENGTH_SELECTOR: Selector<SingleUse<SetMeasureLengthCommand>> =
@@ -214,9 +214,13 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     .get(EDIT_MEAUSRE_LENGTH_SELECTOR)
                     .and_then(SingleUse::take)
                 {
-                    data.score
-                        .measure_lengths
-                        .insert(command.position, command.measure_length.into());
+                    if let Some(measure_length) = command.measure_length {
+                        data.score
+                            .measure_lengths
+                            .insert(command.position, measure_length.into());
+                    } else {
+                        data.score.measure_lengths.remove(&command.position);
+                    }
                 }
             }
             _ => {}
@@ -368,18 +372,18 @@ impl Widget<ScoreEditorData> for ScoreEditor {
 impl ScoreEditor {
     fn edit_measure_length(&self, ctx: &mut EventCtx, data: &ScoreEditorData) {
         let cursor_position = data.cursor_position.to_owned();
-        let current_measure_length = data
-            .score
-            .measure_lengths
-            .range(..=&cursor_position)
-            .last()
-            .map_or_else(|| BeatLength::four(), |(_, v)| v.to_owned().into());
+        let (already_exsits, current_measure_length) =
+            match data.score.measure_lengths.range(..=&cursor_position).last() {
+                None => (false, BeatLength::four()),
+                Some((k, v)) => (k == &cursor_position, v.to_owned().into()),
+            };
         let widget_id = ctx.widget_id();
         let window_desc = WindowDesc::new(move || {
             build_measure_dialog::<ScoreEditorData>(
                 widget_id,
                 cursor_position.to_owned(),
                 current_measure_length.into(),
+                already_exsits,
             )
         });
         ctx.new_window(window_desc);
