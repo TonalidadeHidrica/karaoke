@@ -8,8 +8,10 @@ use derive_more::From;
 use druid::im::OrdMap;
 use druid::im::Vector;
 use druid::Data;
+use druid::Lens;
 use itertools::Itertools;
 use num::rational::BigRational;
+use num::BigInt;
 use num::One;
 use num::Zero;
 
@@ -106,10 +108,61 @@ impl Sub<&BeatPosition> for &BeatPosition {
     }
 }
 
+#[derive(Clone, Debug, derive_more::From, derive_more::FromStr, derive_more::Display)]
+pub struct BigIntData(BigInt);
+
+impl Data for BigIntData {
+    fn same(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+#[derive(Clone, Debug, derive_more::Display, Data, Lens)]
+#[display(fmt = "{}/{}", numerator, denominator)]
+pub struct MeasureLength {
+    numerator: BigIntData,
+    denominator: BigIntData,
+}
+
+impl Default for MeasureLength {
+    fn default() -> Self {
+        Self::new(4, 4)
+    }
+}
+
+impl From<BeatLength> for MeasureLength {
+    fn from(b: BeatLength) -> Self {
+        let (x, y) = b.0.into();
+        Self {
+            numerator: BigIntData(x),
+            denominator: BigIntData(y * 4),
+        }
+    }
+}
+
+impl From<MeasureLength> for BeatLength {
+    fn from(m: MeasureLength) -> Self {
+        Self(BigRational::new(m.numerator.0 * 4, m.denominator.0))
+    }
+}
+
+impl MeasureLength {
+    pub fn new(numerator: impl Into<BigInt>, denominator: impl Into<BigInt>) -> Self {
+        Self {
+            numerator: BigIntData(numerator.into()),
+            denominator: BigIntData(denominator.into()),
+        }
+    }
+
+    pub fn four() -> Self {
+        BeatLength::four().into()
+    }
+}
+
 #[derive(Clone, Default, Debug, Data)]
 pub struct Score {
     pub tracks: Vector<Track>,
-    pub measure_lengths: OrdMap<BeatPosition, BeatLength>,
+    pub measure_lengths: OrdMap<BeatPosition, MeasureLength>,
 }
 
 #[derive(Clone, Debug, Data)]
@@ -170,22 +223,12 @@ impl Track {
                 None => &beat + &note.length,
             };
             Some((beat, end_beat, note))
-
-            // let (i, _) = elements.find(|e| matches!(e.borrow().kind, Start))?;
-            // let j = match elements
-            //     .peeking_take_while(|(_, e)| matches!(e.borrow().kind, Continued))
-            //     .last()
-            // {
-            //     Some((k, _)) => k + 1,
-            //     None => i + 1,
-            // };
-            // Some((i, j))
         })
     }
 }
 
 pub fn iterate_measures(
-    measures: &OrdMap<BeatPosition, BeatLength>,
+    measures: &OrdMap<BeatPosition, MeasureLength>,
 ) -> impl Iterator<Item = (BeatPosition, BeatPosition)> + '_ {
     let mut measure_lengths = measures.iter().peekable();
     let mut measure_length = BeatLength::four();
@@ -195,11 +238,11 @@ pub fn iterate_measures(
         let mut measure_end_beat = &measure_start_beat + &measure_length;
         if let Some((next_measure_beat, next_measure_length)) = measure_lengths.peek() {
             if next_measure_beat == &&measure_start_beat {
-                measure_length = (*next_measure_length).to_owned();
+                measure_length = (*next_measure_length).to_owned().into();
                 measure_end_beat = &measure_start_beat + &measure_length;
                 measure_lengths.next();
             } else if next_measure_beat < &&measure_end_beat {
-                measure_length = (*next_measure_length).to_owned();
+                measure_length = (*next_measure_length).to_owned().into();
                 measure_end_beat = (*next_measure_beat).to_owned();
                 measure_lengths.next();
             }
@@ -212,31 +255,13 @@ pub fn iterate_measures(
 
 #[cfg(test)]
 mod test {
-    // use super::iterate_elements;
     use super::iterate_measures;
-    use super::BeatLength;
     use super::BeatPosition;
-    // use super::ScoreElement;
-    // use super::ScoreElementKind;
+    use super::MeasureLength;
     use druid::im::ordmap;
     use itertools::iterate;
     use itertools::Itertools;
     use num::BigRational;
-
-    // #[test]
-    // fn test_iterate_elements() {
-    //     use ScoreElementKind::*;
-    //     let elements = vec![
-    //         Start, Continued, Continued, Start, Continued, Continued, Empty, Empty, Start, Empty,
-    //         Start, Empty,
-    //     ]
-    //     .into_iter()
-    //     .map(|kind| ScoreElement { kind });
-    //     assert_eq!(
-    //         iterate_elements(elements).collect_vec(),
-    //         vec![(0, 3), (3, 6), (8, 9), (10, 11),]
-    //     );
-    // }
 
     #[test]
     fn test_iterate_measures_01() {
@@ -253,13 +278,27 @@ mod test {
     #[test]
     fn test_iterate_measures_02() {
         let measures = ordmap![
-            BeatPosition::from(BigRational::from_integer(16.into())) => BeatLength::from(BigRational::from_integer(3.into()))
+            BeatPosition::from(BigRational::from_integer(16.into())) => MeasureLength::new(3, 4)
         ];
         let got = iterate_measures(&measures).take(10).collect_vec();
         let expected = vec![0, 4, 8, 12, 16, 19, 22, 25, 28, 31, 34]
             .into_iter()
             .map(|x| BeatPosition::from(BigRational::from_integer(x.into())))
             .tuple_windows::<(_, _)>()
+            .collect_vec();
+        assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn test_iterate_measures_03() {
+        let measures = ordmap![
+            BeatPosition::zero() => MeasureLength::new(3, 4)
+        ];
+        let got = iterate_measures(&measures).take(10).collect_vec();
+        let expected = iterate(0, |x| x + 3)
+            .map(|x| BeatPosition::from(BigRational::from_integer(x.into())))
+            .tuple_windows::<(_, _)>()
+            .take(10)
             .collect_vec();
         assert_eq!(got, expected);
     }

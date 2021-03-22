@@ -4,57 +4,55 @@ use druid::widget::Flex;
 use druid::widget::Label;
 use druid::widget::TextBox;
 use druid::Data;
-use druid::Lens;
+use druid::SingleUse;
 use druid::Widget;
 use druid::WidgetExt;
-use num::BigInt;
+use druid::WidgetId;
 
 use crate::data_owner::DataOwner;
+use crate::schema::BeatPosition;
+use crate::schema::MeasureLength;
+use crate::score_editor::SetMeasureLengthCommand;
+use crate::score_editor::EDIT_MEAUSRE_LENGTH_SELECTOR;
 
-#[derive(Clone, Debug, derive_more::From, derive_more::FromStr, derive_more::Display)]
-pub struct BigIntData(BigInt);
-
-impl Data for BigIntData {
-    fn same(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-#[derive(Clone, Debug, Data, Lens)]
-pub struct MeasureLength {
-    numerator: BigIntData,
-    denominator: BigIntData,
-}
-
-impl Default for MeasureLength {
-    fn default() -> Self {
-        MeasureLength {
-            numerator: BigIntData(4.into()),
-            denominator: BigIntData(4.into()),
-        }
-    }
-}
-
-pub fn build_measure_dialog<T>() -> impl Widget<T>
+pub fn build_measure_dialog<T>(
+    widget_id: WidgetId,
+    position: BeatPosition,
+    measure_length: MeasureLength,
+) -> impl Widget<T>
 where
-    T: Data + std::fmt::Debug,
+    T: Data,
 {
     let editor = Flex::row()
         .with_child(
             TextBox::new()
                 .with_formatter(ParseFormatter::new())
+                .update_data_while_editing(true)
                 .lens(MeasureLength::numerator),
         )
         .with_child(Label::new("/"))
         .with_child(
             TextBox::new()
                 .with_formatter(ParseFormatter::new())
+                .update_data_while_editing(true)
                 .lens(MeasureLength::denominator),
         );
 
-    let flex = Flex::column()
-        .with_child(editor)
-        .with_child(Button::new("Submit"));
+    let buttons = Flex::row()
+        .with_child(
+            Button::new("Submit").on_click(move |ctx, data: &mut MeasureLength, _| {
+                let payload = SingleUse::new(SetMeasureLengthCommand {
+                    position: position.clone(),
+                    measure_length: data.clone(),
+                });
+                let command = EDIT_MEAUSRE_LENGTH_SELECTOR.with(payload).to(widget_id);
+                ctx.submit_command(command);
+                ctx.window().close();
+            }),
+        )
+        .with_child(Button::new("Cancel").on_click(|ctx, _, _| ctx.window().close()));
 
-    DataOwner::new(MeasureLength::default(), flex)
+    let flex = Flex::column().with_child(editor).with_child(buttons);
+
+    DataOwner::new(measure_length, flex)
 }

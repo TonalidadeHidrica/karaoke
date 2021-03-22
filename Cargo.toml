@@ -13,4 +13,6 @@ itertools = "0.10.0"
 num = "0.4.0"
 num-derive = "0.3.3"
 num-traits = "0.2.14"
-thiserror = "1.0.24"
+
+[patch.crates-io]
+im = { git = "https://github.com/arthurprs/im-rs", branch = "fix" }
