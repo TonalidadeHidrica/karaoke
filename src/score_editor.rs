@@ -16,6 +16,7 @@ use druid::widget::Flex;
 use druid::widget::Label;
 use druid::Color;
 use druid::Data;
+use druid::Env;
 use druid::Event;
 use druid::EventCtx;
 use druid::Insets;
@@ -115,13 +116,7 @@ pub const EDIT_MEAUSRE_LENGTH_SELECTOR: Selector<SingleUse<SetMeasureLengthComma
     Selector::new(concat!(module_path!(), "::EDIT_MEAUSRE_LENGTH_SELCTOR"));
 
 impl Widget<ScoreEditorData> for ScoreEditor {
-    fn event(
-        &mut self,
-        ctx: &mut EventCtx,
-        event: &druid::Event,
-        data: &mut ScoreEditorData,
-        _env: &druid::Env,
-    ) {
+    fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut ScoreEditorData, _env: &Env) {
         match event {
             Event::WindowConnected => {
                 ctx.request_focus();
