@@ -429,7 +429,7 @@ impl ScoreEditor {
             build_bpm_dialog::<ScoreEditorData>(
                 widget_id,
                 cursor_position.to_owned(),
-                current_bpm.into(),
+                current_bpm,
                 already_exsits,
             )
         });
