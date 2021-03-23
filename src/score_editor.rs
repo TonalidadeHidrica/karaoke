@@ -1,7 +1,9 @@
+use crate::bpm_dialog::build_bpm_dialog;
 use crate::measure_dialog::build_measure_dialog;
 use crate::schema::iterate_measures;
 use crate::schema::BeatLength;
 use crate::schema::BeatPosition;
+use crate::schema::Bpm;
 use crate::schema::MeasureLength;
 use crate::schema::Score;
 use crate::schema::ScoreElement;
@@ -112,8 +114,14 @@ pub struct SetMeasureLengthCommand {
     pub measure_length: Option<MeasureLength>,
 }
 
-pub const EDIT_MEAUSRE_LENGTH_SELECTOR: Selector<SingleUse<SetMeasureLengthCommand>> =
-    Selector::new(concat!(module_path!(), "::EDIT_MEAUSRE_LENGTH_SELCTOR"));
+selector! { EDIT_MEAUSRE_LENGTH_SELECTOR: SingleUse<SetMeasureLengthCommand> }
+
+pub struct SetBpmCommand {
+    pub position: BeatPosition,
+    pub bpm: Option<Bpm>,
+}
+
+selector! { EDIT_BPM_SELECTOR: SingleUse<SetBpmCommand> }
 
 impl Widget<ScoreEditorData> for ScoreEditor {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut ScoreEditorData, _env: &Env) {
@@ -166,6 +174,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                         data.selected_track.map(|i| data.score.tracks.remove(i));
                     }
                     "m" => self.edit_measure_length(ctx, data),
+                    "b" => self.edit_bpm(ctx, data),
                     _ => {}
                 },
                 Key::Backspace => {
@@ -209,13 +218,20 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     .get(EDIT_MEAUSRE_LENGTH_SELECTOR)
                     .and_then(SingleUse::take)
                 {
-                    if let Some(measure_length) = command.measure_length {
-                        data.score
+                    match command.measure_length {
+                        Some(measure_length) => data
+                            .score
                             .measure_lengths
-                            .insert(command.position, measure_length.into());
-                    } else {
-                        data.score.measure_lengths.remove(&command.position);
-                    }
+                            .insert(command.position, measure_length),
+                        None => data.score.measure_lengths.remove(&command.position),
+                    };
+                } else if let Some(command) =
+                    command.get(EDIT_BPM_SELECTOR).and_then(SingleUse::take)
+                {
+                    match command.bpm {
+                        Some(bpm) => data.score.bpms.insert(command.position, bpm),
+                        None => data.score.bpms.remove(&command.position),
+                    };
                 }
             }
             _ => {}
@@ -276,6 +292,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
         let display_end_beat = display_end_beat + BeatLength::four();
 
         let mut measure_lengths = data.score.measure_lengths.iter().peekable();
+        let mut bpms = data.score.bpms.iter().peekable();
 
         for (beat_start, beat_end) in iterate_measures(&data.score.measure_lengths) {
             if &beat_end - &left_beat > BeatLength::from(BigRational::from_integer(16.into())) {
@@ -337,6 +354,22 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                         Err(e) => eprintln!("{}", e),
                     }
                 }
+
+                for (beat, bpm) in
+                    bpms.peeking_take_while(|(b, _)| (&beat_start..&beat_end).contains(b))
+                {
+                    // TODO duplicates?
+                    let x = get_x(beat - &left_beat);
+                    let layout = ctx
+                        .text()
+                        .new_text_layout(format!("{:.2}", bpm.0))
+                        .text_color(env.get(LABEL_COLOR))
+                        .build();
+                    match layout {
+                        Ok(layout) => ctx.draw_text(&layout, (x, y)),
+                        Err(e) => eprintln!("{}", e),
+                    }
+                }
             }
 
             if display_end_beat <= beat_start {
@@ -378,6 +411,25 @@ impl ScoreEditor {
                 widget_id,
                 cursor_position.to_owned(),
                 current_measure_length.into(),
+                already_exsits,
+            )
+        });
+        ctx.new_window(window_desc);
+    }
+
+    fn edit_bpm(&self, ctx: &mut EventCtx, data: &ScoreEditorData) {
+        let cursor_position = data.cursor_position.to_owned();
+        let (already_exsits, current_bpm) = match data.score.bpms.range(..=&cursor_position).last()
+        {
+            None => (false, Bpm::default()),
+            Some((k, v)) => (k == &cursor_position, *v),
+        };
+        let widget_id = ctx.widget_id();
+        let window_desc = WindowDesc::new(move || {
+            build_bpm_dialog::<ScoreEditorData>(
+                widget_id,
+                cursor_position.to_owned(),
+                current_bpm.into(),
                 already_exsits,
             )
         });

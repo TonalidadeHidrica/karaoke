@@ -159,10 +159,20 @@ impl MeasureLength {
     }
 }
 
+#[derive(Clone, Copy, Debug, derive_more::FromStr, derive_more::Display, Data)]
+pub struct Bpm(pub f64);
+
+impl Default for Bpm {
+    fn default() -> Self {
+        Self(120.0)
+    }
+}
+
 #[derive(Clone, Default, Debug, Data)]
 pub struct Score {
     pub tracks: Vector<Track>,
     pub measure_lengths: OrdMap<BeatPosition, MeasureLength>,
+    pub bpms: OrdMap<BeatPosition, Bpm>,
 }
 
 #[derive(Clone, Debug, Data)]

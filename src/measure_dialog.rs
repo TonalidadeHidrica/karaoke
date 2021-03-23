@@ -3,7 +3,6 @@ use druid::widget::Button;
 use druid::widget::Flex;
 use druid::widget::Label;
 use druid::widget::TextBox;
-use druid::Data;
 use druid::SingleUse;
 use druid::Widget;
 use druid::WidgetExt;
@@ -20,10 +19,7 @@ pub fn build_measure_dialog<T>(
     position: BeatPosition,
     measure_length: MeasureLength,
     already_exsits: bool,
-) -> impl Widget<T>
-where
-    T: Data,
-{
+) -> impl Widget<T> {
     let editor = Flex::row()
         .with_child(
             TextBox::new()
@@ -38,6 +34,7 @@ where
                 .update_data_while_editing(true)
                 .lens(MeasureLength::denominator),
         );
+
     let position_2 = position.clone();
 
     let mut buttons = Flex::row();
