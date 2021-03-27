@@ -1,3 +1,5 @@
+use crate::audio::AudioCommand;
+use crate::audio::AudioManager;
 use crate::bpm_dialog::build_bpm_dialog;
 use crate::measure_dialog::build_measure_dialog;
 use crate::schema::iterate_measures;
@@ -9,6 +11,7 @@ use crate::schema::Score;
 use crate::schema::ScoreElement;
 use crate::schema::ScoreElementKind;
 use crate::schema::Track;
+use druid::Modifiers;
 use druid::keyboard_types::Key;
 use druid::kurbo::Line;
 use druid::piet::Text;
@@ -37,7 +40,7 @@ use num::BigRational;
 use num::ToPrimitive;
 use num::Zero;
 
-pub fn build_toplevel_widget() -> impl Widget<ScoreEditorData> {
+pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEditorData> {
     let status_bar = Flex::row()
         .with_child(Label::dynamic(|data: &ScoreEditorData, _| {
             let pos = &data.cursor_position;
@@ -67,7 +70,7 @@ pub fn build_toplevel_widget() -> impl Widget<ScoreEditorData> {
 
     Flex::column()
         .with_child(status_bar)
-        .with_child(ScoreEditor::default())
+        .with_child(ScoreEditor { audio_manager })
 }
 
 fn format_beat_position(pos: &BeatPosition) -> String {
@@ -99,8 +102,9 @@ impl Default for ScoreEditorData {
     }
 }
 
-#[derive(Default)]
-struct ScoreEditor {}
+struct ScoreEditor {
+    audio_manager: AudioManager,
+}
 
 fn cursor_delta_candidates() -> impl DoubleEndedIterator<Item = BeatLength> {
     vec![4, 8, 12, 16, 24, 32]
@@ -129,7 +133,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             Event::WindowConnected => {
                 ctx.request_focus();
             }
-            Event::KeyDown(KeyEvent { key, .. }) => match key {
+            Event::KeyDown(KeyEvent { key, mods,  .. }) => match key {
                 Key::Character(s) => match s.as_str() {
                     "1" => {
                         append_element(data, ScoreElementKind::Start);
@@ -137,7 +141,9 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     "2" => {
                         append_element(data, ScoreElementKind::Stop);
                     }
-                    " " => {
+                    " " => if mods.contains(Modifiers::SHIFT) {
+                        self.audio_manager.command_sender().send(AudioCommand::Play).unwrap();
+                    } else {
                         append_element(data, ScoreElementKind::Skip);
                     }
                     "a" => {
