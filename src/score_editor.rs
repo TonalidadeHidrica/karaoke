@@ -11,14 +11,15 @@ use crate::schema::Score;
 use crate::schema::ScoreElement;
 use crate::schema::ScoreElementKind;
 use crate::schema::Track;
-use druid::Modifiers;
 use druid::keyboard_types::Key;
 use druid::kurbo::Line;
 use druid::piet::Text;
 use druid::piet::TextLayoutBuilder;
+use druid::text::format::ParseFormatter;
 use druid::theme::LABEL_COLOR;
 use druid::widget::Flex;
 use druid::widget::Label;
+use druid::widget::TextBox;
 use druid::Color;
 use druid::Data;
 use druid::Env;
@@ -27,6 +28,7 @@ use druid::EventCtx;
 use druid::Insets;
 use druid::KeyEvent;
 use druid::Lens;
+use druid::Modifiers;
 use druid::Rect;
 use druid::RenderContext;
 use druid::Selector;
@@ -64,6 +66,19 @@ pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEd
             })
             .lens(ScoreEditorData::cursor_delta),
         )
+        .with_spacer(20.0)
+        .with_child(Label::dynamic(|data: &ScoreEditorData, _| {
+            format_time(data.score.beat_to_time(&data.cursor_position))
+        }))
+        .with_spacer(20.0)
+        .with_child(Label::new("Offset:"))
+        .with_child(
+            TextBox::new()
+                .with_formatter(ParseFormatter::new())
+                .update_data_while_editing(true)
+                .lens(Score::offset)
+                .lens(ScoreEditorData::score),
+        )
         .main_axis_alignment(druid::widget::MainAxisAlignment::Start)
         .must_fill_main_axis(true)
         .padding(5.0);
@@ -81,6 +96,16 @@ fn format_beat_position(pos: &BeatPosition) -> String {
     format!("{}{}", pos.0.trunc(), fract)
 }
 
+fn format_time(time: f64) -> String {
+    let millis = ((time + 0.0005) * 1000.0) as u64;
+    format!(
+        "{}:{:02}.{:03}",
+        millis / 60000,
+        millis % 60000 / 1000,
+        millis % 1000
+    )
+}
+
 #[derive(Clone, Debug, Data, Lens)]
 pub struct ScoreEditorData {
     score: Score,
@@ -88,6 +113,7 @@ pub struct ScoreEditorData {
     cursor_position: BeatPosition,
     cursor_delta: BeatLength,
     selected_track: Option<usize>,
+    playing_music: bool,
 }
 
 impl Default for ScoreEditorData {
@@ -98,6 +124,7 @@ impl Default for ScoreEditorData {
             cursor_position: BeatPosition::zero(),
             cursor_delta: BeatLength::one(),
             selected_track: None,
+            playing_music: false,
         }
     }
 }
@@ -133,7 +160,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             Event::WindowConnected => {
                 ctx.request_focus();
             }
-            Event::KeyDown(KeyEvent { key, mods,  .. }) => match key {
+            Event::KeyDown(KeyEvent { key, mods, .. }) => match key {
                 Key::Character(s) => match s.as_str() {
                     "1" => {
                         append_element(data, ScoreElementKind::Start);
@@ -141,10 +168,21 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     "2" => {
                         append_element(data, ScoreElementKind::Stop);
                     }
-                    " " => if mods.contains(Modifiers::SHIFT) {
-                        self.audio_manager.command_sender().send(AudioCommand::Play).unwrap();
-                    } else {
-                        append_element(data, ScoreElementKind::Skip);
+                    " " => {
+                        if mods.contains(Modifiers::SHIFT) {
+                            let sender = self.audio_manager.command_sender();
+                            if data.playing_music {
+                                sender.send(AudioCommand::Pause).unwrap();
+                                data.playing_music = false;
+                            } else {
+                                let pos = data.score.beat_to_time(&data.cursor_position);
+                                sender.send(AudioCommand::Seek(pos)).unwrap();
+                                sender.send(AudioCommand::Play).unwrap();
+                                data.playing_music = true;
+                            }
+                        } else {
+                            append_element(data, ScoreElementKind::Skip);
+                        }
                     }
                     "a" => {
                         data.score.tracks.push_back(Track {
@@ -219,6 +257,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 }
                 _ => {}
             },
+            Event::MouseDown(..) => ctx.request_focus(),
             Event::Command(command) => {
                 if let Some(command) = command
                     .get(EDIT_MEAUSRE_LENGTH_SELECTOR)

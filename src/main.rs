@@ -9,7 +9,10 @@ use karaoke::score_editor::ScoreEditorData;
 fn main() -> Result<(), EditorError> {
     let audio_manager = AudioManager::new()?;
     if let Some(path) = std::env::args().nth(1) {
-        audio_manager.command_sender().send(AudioCommand::LoadMusic(path.into())).unwrap();
+        audio_manager
+            .command_sender()
+            .send(AudioCommand::LoadMusic(path.into()))
+            .unwrap();
     };
     let data = ScoreEditorData::default();
     let window =

@@ -30,7 +30,7 @@ pub struct AudioManager {
 pub enum AudioCommand {
     Play,
     Pause,
-    // Seek(f64),
+    Seek(f64),
     LoadMusic(PathBuf),
 }
 
@@ -114,7 +114,7 @@ impl AudioOutputCallback {
                 Some(music) if self.playing => music.next(),
                 _ => None,
             };
-            *out = S::from(&next.unwrap_or(0.0));
+            *out = S::from(&(next.unwrap_or(0.0) * 0.4));
         }
     }
 
@@ -122,6 +122,11 @@ impl AudioOutputCallback {
         match command {
             AudioCommand::Play => self.playing = true,
             AudioCommand::Pause => self.playing = false,
+            AudioCommand::Seek(time) => {
+                if let Some(music) = &mut self.music {
+                    music.seek(time.max(0.0)).unwrap();
+                }
+            }
             AudioCommand::LoadMusic(path) => {
                 if let Err(e) = self.load_music(path) {
                     eprintln!("{}", e);

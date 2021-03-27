@@ -13,6 +13,7 @@ use itertools::Itertools;
 use num::rational::BigRational;
 use num::BigInt;
 use num::One;
+use num::ToPrimitive;
 use num::Zero;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, From, Debug, Data)]
@@ -168,11 +169,42 @@ impl Default for Bpm {
     }
 }
 
-#[derive(Clone, Default, Debug, Data)]
+impl Bpm {
+    fn beat_length(&self) -> f64 {
+        60.0 / self.0
+    }
+}
+
+#[derive(Clone, Default, Debug, Data, Lens)]
 pub struct Score {
     pub tracks: Vector<Track>,
     pub measure_lengths: OrdMap<BeatPosition, MeasureLength>,
     pub bpms: OrdMap<BeatPosition, Bpm>,
+    pub offset: f64,
+}
+
+impl Score {
+    pub fn beat_to_time(&self, pos: &BeatPosition) -> f64 {
+        let mut time = self.offset;
+        match self.bpms.iter().next() {
+            None => return time + pos.0.to_f64().unwrap() / 2.0, // Assume BPM=120
+            Some((first_beat, bpm)) => {
+                time += first_beat.min(pos).0.to_f64().unwrap() * bpm.beat_length();
+                if pos <= first_beat {
+                    return time;
+                }
+            }
+        };
+        for ((start_beat, bpm), (end_beat, _)) in self.bpms.iter().tuple_windows() {
+            time += (end_beat.min(pos) - start_beat).0.to_f64().unwrap() * bpm.beat_length();
+            if pos <= end_beat {
+                return time;
+            }
+        }
+        let (last_beat, bpm) = self.bpms.iter().next_back().expect("Always exists");
+        time += (pos - last_beat).0.to_f64().unwrap() * bpm.beat_length();
+        time
+    }
 }
 
 #[derive(Clone, Debug, Data)]
