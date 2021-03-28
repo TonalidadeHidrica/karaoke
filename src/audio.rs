@@ -32,6 +32,8 @@ pub enum AudioCommand {
     Pause,
     Seek(f64),
     LoadMusic(PathBuf),
+
+    SetVolume(f64),
 }
 
 impl AudioManager {
@@ -84,6 +86,7 @@ struct AudioOutputCallback {
 
     music: Option<MusicSource>,
     playing: bool,
+    music_volume: f64,
 }
 
 impl AudioOutputCallback {
@@ -93,6 +96,7 @@ impl AudioOutputCallback {
             command_receiver,
             music: None,
             playing: false,
+            music_volume: 0.0,
         }
     }
 }
@@ -114,7 +118,7 @@ impl AudioOutputCallback {
                 Some(music) if self.playing => music.next(),
                 _ => None,
             };
-            *out = S::from(&(next.unwrap_or(0.0) * 0.4));
+            *out = S::from(&(next.unwrap_or(0.0) * self.music_volume as f32));
         }
     }
 
@@ -132,6 +136,7 @@ impl AudioOutputCallback {
                     eprintln!("{}", e);
                 }
             }
+            AudioCommand::SetVolume(vol) => self.music_volume = vol,
         };
     }
 

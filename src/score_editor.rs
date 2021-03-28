@@ -19,6 +19,7 @@ use druid::text::format::ParseFormatter;
 use druid::theme::LABEL_COLOR;
 use druid::widget::Flex;
 use druid::widget::Label;
+use druid::widget::Slider;
 use druid::widget::TextBox;
 use druid::Color;
 use druid::Data;
@@ -28,6 +29,7 @@ use druid::EventCtx;
 use druid::Insets;
 use druid::KeyEvent;
 use druid::Lens;
+use druid::LifeCycle;
 use druid::Modifiers;
 use druid::Rect;
 use druid::RenderContext;
@@ -79,6 +81,9 @@ pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEd
                 .lens(Score::offset)
                 .lens(ScoreEditorData::score),
         )
+        .with_spacer(20.0)
+        .with_child(Label::new("Volume:"))
+        .with_child(Slider::new().lens(ScoreEditorData::music_volume))
         .main_axis_alignment(druid::widget::MainAxisAlignment::Start)
         .must_fill_main_axis(true)
         .padding(5.0);
@@ -114,6 +119,7 @@ pub struct ScoreEditorData {
     cursor_delta: BeatLength,
     selected_track: Option<usize>,
     playing_music: bool,
+    music_volume: f64,
 }
 
 impl Default for ScoreEditorData {
@@ -125,6 +131,7 @@ impl Default for ScoreEditorData {
             cursor_delta: BeatLength::one(),
             selected_track: None,
             playing_music: false,
+            music_volume: 0.4,
         }
     }
 }
@@ -286,10 +293,13 @@ impl Widget<ScoreEditorData> for ScoreEditor {
     fn lifecycle(
         &mut self,
         _ctx: &mut druid::LifeCycleCtx,
-        _event: &druid::LifeCycle,
-        _data: &ScoreEditorData,
-        _env: &druid::Env,
+        event: &LifeCycle,
+        data: &ScoreEditorData,
+        _env: &Env,
     ) {
+        if let LifeCycle::WidgetAdded = event {
+            self.send_music_volume(data);
+        }
     }
 
     fn update(
@@ -301,6 +311,9 @@ impl Widget<ScoreEditorData> for ScoreEditor {
     ) {
         if !old_data.same(data) {
             ctx.request_paint();
+        }
+        if old_data.music_volume != data.music_volume {
+            self.send_music_volume(data);
         }
     }
 
@@ -443,6 +456,13 @@ impl Widget<ScoreEditorData> for ScoreEditor {
 }
 
 impl ScoreEditor {
+    fn send_music_volume(&self, data: &ScoreEditorData) {
+        self.audio_manager
+            .command_sender()
+            .send(AudioCommand::SetVolume(data.music_volume))
+            .unwrap()
+    }
+
     fn edit_measure_length(&self, ctx: &mut EventCtx, data: &ScoreEditorData) {
         let cursor_position = data.cursor_position.to_owned();
         let (already_exsits, current_measure_length) =
