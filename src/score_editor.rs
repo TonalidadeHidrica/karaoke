@@ -46,35 +46,42 @@ use num::Zero;
 
 pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEditorData> {
     let status_bar = Flex::row()
-        .with_child(Label::dynamic(|data: &ScoreEditorData, _| {
-            let pos = &data.cursor_position;
-            let (start_beat, len) = match data.score.measure_lengths.range(..=pos).next_back() {
-                Some((a, b)) => (a.to_owned(), b.to_owned().into()),
-                None => (BeatPosition::zero(), BeatLength::four()),
-            };
-            let delta_beat = (pos - &start_beat).0;
-            let index = (&delta_beat / &len.0).trunc();
-            let beat = &delta_beat - &index * &len.0;
-            format!(
-                "{}:{}",
-                index,
-                format_beat_position(&BeatPosition::from(beat))
-            )
-        }))
+        .with_child(
+            Label::dynamic(|data: &ScoreEditorData, _| {
+                let pos = &data.cursor_position;
+                let (start_beat, len) = match data.score.measure_lengths.range(..=pos).next_back() {
+                    Some((a, b)) => (a.to_owned(), b.to_owned().into()),
+                    None => (BeatPosition::zero(), BeatLength::four()),
+                };
+                let delta_beat = (pos - &start_beat).0;
+                let index = (&delta_beat / &len.0).trunc();
+                let beat = &delta_beat - &index * &len.0;
+                format!(
+                    "{}:{}",
+                    index,
+                    format_beat_position(&BeatPosition::from(beat))
+                )
+            })
+            .fix_width(50.0),
+        )
         .with_spacer(20.0)
         .with_child(
             Label::dynamic(|len: &BeatLength, _| {
                 format!("{}-th note", BigRational::from_integer(4.into()) / &len.0)
             })
+            .fix_width(80.0)
             .lens(ScoreEditorData::cursor_delta),
         )
         .with_spacer(20.0)
-        .with_child(Label::dynamic(|data: &ScoreEditorData, _| {
-            let display_time = data
-                .music_playback_position
-                .unwrap_or_else(|| data.score.beat_to_time(&data.cursor_position));
-            format_time(display_time)
-        }))
+        .with_child(
+            Label::dynamic(|data: &ScoreEditorData, _| {
+                let display_time = data
+                    .music_playback_position
+                    .unwrap_or_else(|| data.score.beat_to_time(&data.cursor_position));
+                format_time(display_time)
+            })
+            .fix_width(80.0),
+        )
         .with_spacer(20.0)
         .with_child(Label::new("Offset:"))
         .with_child(
