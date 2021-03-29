@@ -2,9 +2,8 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
 use std::sync::mpsc;
-use std::sync::mpsc::Receiver;
-use std::sync::mpsc::Sender;
 use std::sync::mpsc::TryRecvError;
+use std::time::Instant;
 
 use cpal::traits::DeviceTrait;
 use cpal::traits::HostTrait;
@@ -15,6 +14,7 @@ use cpal::Stream;
 use cpal::StreamConfig;
 use derive_getters::Getters;
 use rodio::Decoder;
+use tokio::sync::watch;
 use universal_audio_decoder::new_uniform_source_iterator;
 use universal_audio_decoder::TrueUniformSourceIterator;
 
@@ -24,7 +24,8 @@ use crate::error::AudioError;
 pub struct AudioManager {
     #[getter(skip)]
     _stream: Stream,
-    command_sender: Sender<AudioCommand>,
+    command_sender: mpsc::Sender<AudioCommand>,
+    state_receiver: watch::Receiver<AudioState>,
 }
 
 pub enum AudioCommand {
@@ -36,18 +37,31 @@ pub enum AudioCommand {
     SetVolume(f64),
 }
 
+pub enum AudioState {
+    NotPlaying,
+    Playing {
+        instant: Instant,
+        music_position: f64,
+    },
+}
+
 impl AudioManager {
     pub fn new() -> Result<Self, AudioError> {
         let (command_sender, command_receiver) = mpsc::channel();
-        let _stream = Self::build_stream(command_receiver)?;
+        let (state_sender, state_receiver) = watch::channel(AudioState::NotPlaying);
+        let _stream = Self::build_stream(command_receiver, state_sender)?;
         let manager = AudioManager {
             _stream,
             command_sender,
+            state_receiver,
         };
         Ok(manager)
     }
 
-    fn build_stream(command_receiver: Receiver<AudioCommand>) -> Result<Stream, AudioError> {
+    fn build_stream(
+        command_receiver: mpsc::Receiver<AudioCommand>,
+        state_sender: watch::Sender<AudioState>,
+    ) -> Result<Stream, AudioError> {
         let host = cpal::default_host();
         let device = host
             .default_output_device()
@@ -62,7 +76,8 @@ impl AudioManager {
         let sample_format = supported_config.sample_format();
         let stream_config = StreamConfig::from(supported_config);
 
-        let callback = AudioOutputCallback::new(stream_config.clone(), command_receiver);
+        let callback =
+            AudioOutputCallback::new(stream_config.clone(), command_receiver, state_sender);
         let error_callback = |err| eprintln!("an error occurred on audio stream: {:?}", err);
         let stream = {
             use cpal::SampleFormat::*;
@@ -78,31 +93,62 @@ impl AudioManager {
     }
 }
 
+impl AudioManager {
+    pub fn playback_position(&self) -> Option<f64> {
+        use AudioState::*;
+        match *self.state_receiver.borrow() {
+            NotPlaying => None,
+            Playing {
+                instant,
+                music_position,
+            } => {
+                let play_speed = 1.0;
+                let now = Instant::now();
+                let diff = if now > instant {
+                    (now - instant).as_secs_f64()
+                } else {
+                    -(instant - now).as_secs_f64()
+                };
+                Some(music_position + diff * play_speed)
+            }
+        }
+    }
+}
+
 type MusicSource = TrueUniformSourceIterator<Decoder<BufReader<File>>>;
 
 struct AudioOutputCallback {
     output_stream_config: StreamConfig,
-    command_receiver: Receiver<AudioCommand>,
+    command_receiver: mpsc::Receiver<AudioCommand>,
+    state_sender: watch::Sender<AudioState>,
 
     music: Option<MusicSource>,
     playing: bool,
     music_volume: f64,
+
+    playback_time: f64,
 }
 
 impl AudioOutputCallback {
-    fn new(output_stream_config: StreamConfig, command_receiver: Receiver<AudioCommand>) -> Self {
+    fn new(
+        output_stream_config: StreamConfig,
+        command_receiver: mpsc::Receiver<AudioCommand>,
+        state_sender: watch::Sender<AudioState>,
+    ) -> Self {
         Self {
             output_stream_config,
             command_receiver,
+            state_sender,
             music: None,
             playing: false,
             music_volume: 0.0,
+            playback_time: 0.0,
         }
     }
 }
 
 impl AudioOutputCallback {
-    fn callback<S>(&mut self, out: &mut [S], _info: &OutputCallbackInfo)
+    fn callback<S>(&mut self, out: &mut [S], callback_info: &OutputCallbackInfo)
     where
         S: Sample,
     {
@@ -113,6 +159,14 @@ impl AudioOutputCallback {
         } {
             self.process_command(command);
         }
+
+        self.refresh_state(callback_info);
+        if self.playing {
+            self.playback_time += 1.0 / self.output_stream_config.sample_rate.0 as f64
+                * out.len() as f64
+                / self.output_stream_config.channels as f64;
+        }
+
         for out in out.iter_mut() {
             let next = match &mut self.music {
                 Some(music) if self.playing => music.next(),
@@ -122,11 +176,28 @@ impl AudioOutputCallback {
         }
     }
 
+    fn refresh_state(&self, callback_info: &OutputCallbackInfo) {
+        let state = if self.playing {
+            let pb = &callback_info.timestamp().playback;
+            let cb = &callback_info.timestamp().callback;
+            let instant = Instant::now() + pb.duration_since(cb).unwrap_or_default();
+            AudioState::Playing {
+                instant,
+                music_position: self.playback_time,
+            }
+        } else {
+            AudioState::NotPlaying
+        };
+        let _ = self.state_sender.send(state);
+    }
+
     fn process_command(&mut self, command: AudioCommand) {
         match command {
             AudioCommand::Play => self.playing = true,
             AudioCommand::Pause => self.playing = false,
             AudioCommand::Seek(time) => {
+                // TODO negative seek
+                self.playback_time = time;
                 if let Some(music) = &mut self.music {
                     music.seek(time.max(0.0)).unwrap();
                 }

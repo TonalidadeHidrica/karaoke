@@ -70,7 +70,10 @@ pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEd
         )
         .with_spacer(20.0)
         .with_child(Label::dynamic(|data: &ScoreEditorData, _| {
-            format_time(data.score.beat_to_time(&data.cursor_position))
+            let display_time = data
+                .music_playback_position
+                .unwrap_or_else(|| data.score.beat_to_time(&data.cursor_position));
+            format_time(display_time)
         }))
         .with_spacer(20.0)
         .with_child(Label::new("Offset:"))
@@ -120,6 +123,8 @@ pub struct ScoreEditorData {
     selected_track: Option<usize>,
     playing_music: bool,
     music_volume: f64,
+
+    music_playback_position: Option<f64>,
 }
 
 impl Default for ScoreEditorData {
@@ -132,6 +137,8 @@ impl Default for ScoreEditorData {
             selected_track: None,
             playing_music: false,
             music_volume: 0.4,
+
+            music_playback_position: None,
         }
     }
 }
@@ -181,11 +188,13 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                             if data.playing_music {
                                 sender.send(AudioCommand::Pause).unwrap();
                                 data.playing_music = false;
+                                data.music_playback_position = None;
                             } else {
                                 let pos = data.score.beat_to_time(&data.cursor_position);
                                 sender.send(AudioCommand::Seek(pos)).unwrap();
                                 sender.send(AudioCommand::Play).unwrap();
                                 data.playing_music = true;
+                                ctx.request_anim_frame();
                             }
                         } else {
                             append_element(data, ScoreElementKind::Skip);
@@ -284,6 +293,12 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                         Some(bpm) => data.score.bpms.insert(command.position, bpm),
                         None => data.score.bpms.remove(&command.position),
                     };
+                }
+            }
+            Event::AnimFrame(..) => {
+                if data.playing_music {
+                    data.music_playback_position = self.audio_manager.playback_position();
+                    ctx.request_anim_frame();
                 }
             }
             _ => {}
