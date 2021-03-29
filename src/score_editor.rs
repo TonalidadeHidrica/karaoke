@@ -47,22 +47,7 @@ use num::Zero;
 pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEditorData> {
     let status_bar = Flex::row()
         .with_child(
-            Label::dynamic(|data: &ScoreEditorData, _| {
-                let pos = &data.cursor_position;
-                let (start_beat, len) = match data.score.measure_lengths.range(..=pos).next_back() {
-                    Some((a, b)) => (a.to_owned(), b.to_owned().into()),
-                    None => (BeatPosition::zero(), BeatLength::four()),
-                };
-                let delta_beat = (pos - &start_beat).0;
-                let index = (&delta_beat / &len.0).trunc();
-                let beat = &delta_beat - &index * &len.0;
-                format!(
-                    "{}:{}",
-                    index,
-                    format_beat_position(&BeatPosition::from(beat))
-                )
-            })
-            .fix_width(50.0),
+            Label::dynamic(|data: &ScoreEditorData, _| beat_label_string(data)).fix_width(50.0),
         )
         .with_spacer(20.0)
         .with_child(
@@ -75,9 +60,10 @@ pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEd
         .with_spacer(20.0)
         .with_child(
             Label::dynamic(|data: &ScoreEditorData, _| {
-                let display_time = data
-                    .music_playback_position
-                    .unwrap_or_else(|| data.score.beat_to_time(&data.cursor_position));
+                let display_time = match &data.music_playback_position {
+                    Some(pos) => pos.time,
+                    None => data.score.beat_to_time(&data.cursor_position),
+                };
                 format_time(display_time)
             })
             .fix_width(80.0),
@@ -101,6 +87,26 @@ pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEd
     Flex::column()
         .with_child(status_bar)
         .with_child(ScoreEditor { audio_manager })
+}
+
+fn beat_label_string(data: &ScoreEditorData) -> String {
+    let (playing, pos) = match data.music_playback_position.as_ref() {
+        Some(pos) => (true, &pos.beat),
+        None => (false, &data.cursor_position),
+    };
+    let (start_beat, len) = match data.score.measure_lengths.range(..=pos).next_back() {
+        Some((a, b)) => (a.to_owned(), b.to_owned().into()),
+        None => (BeatPosition::zero(), BeatLength::four()),
+    };
+    let delta_beat = (pos - &start_beat).0;
+    let measure_index = (&delta_beat / &len.0).trunc();
+    let beat = &delta_beat - &measure_index * &len.0;
+    let fraction_str = if playing {
+        format!("{:.0}", beat.to_f64().unwrap().trunc())
+    } else {
+        format_beat_position(&BeatPosition::from(beat))
+    };
+    format!("{}:{}", measure_index, fraction_str)
 }
 
 fn format_beat_position(pos: &BeatPosition) -> String {
@@ -131,7 +137,13 @@ pub struct ScoreEditorData {
     playing_music: bool,
     music_volume: f64,
 
-    music_playback_position: Option<f64>,
+    music_playback_position: Option<MusicPlaybackPositionData>,
+}
+
+#[derive(Clone, Debug, Data)]
+pub struct MusicPlaybackPositionData {
+    time: f64,
+    beat: BeatPosition,
 }
 
 impl Default for ScoreEditorData {
@@ -304,7 +316,15 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             }
             Event::AnimFrame(..) => {
                 if data.playing_music {
-                    data.music_playback_position = self.audio_manager.playback_position();
+                    if let Some(time) = self.audio_manager.playback_position() {
+                        if let Some(beat) = BigRational::from_float(data.score.time_to_beat(time)) {
+                            let pos = MusicPlaybackPositionData {
+                                time,
+                                beat: beat.into(),
+                            };
+                            data.music_playback_position = Some(pos);
+                        }
+                    }
                     ctx.request_anim_frame();
                 }
             }
@@ -401,6 +421,11 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 if (&left_beat..&beat_start).contains(&&data.cursor_position) {
                     draw_cursor(ctx, get_x, &data.cursor_position, start_y, y, &left_beat);
                 }
+                if let Some(beat) = data.music_playback_position.as_ref().map(|p| &p.beat) {
+                    if (&left_beat..&beat_start).contains(&&beat) {
+                        draw_cursor(ctx, get_x, &beat, start_y, y, &left_beat);
+                    }
+                }
 
                 y += line_margin;
                 left_beat = beat_start.clone();
@@ -471,6 +496,12 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 if (&left_beat..=&beat_start).contains(&&data.cursor_position) {
                     draw_cursor(ctx, get_x, &data.cursor_position, start_y, y, &left_beat);
                 }
+                if let Some(beat) = data.music_playback_position.as_ref().map(|p| &p.beat) {
+                    if (&left_beat..&beat_start).contains(&&beat) {
+                        draw_cursor(ctx, get_x, &beat, start_y, y, &left_beat);
+                    }
+                }
+
                 break;
             }
         }

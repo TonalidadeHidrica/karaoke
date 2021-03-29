@@ -194,7 +194,7 @@ impl Score {
                     return time;
                 }
             }
-        };
+        }
         for ((start_beat, bpm), (end_beat, _)) in self.bpms.iter().tuple_windows() {
             time += (end_beat.min(pos) - start_beat).0.to_f64().unwrap() * bpm.beat_length();
             if pos <= end_beat {
@@ -204,6 +204,36 @@ impl Score {
         let (last_beat, bpm) = self.bpms.iter().next_back().expect("Always exists");
         time += (pos - last_beat).0.to_f64().unwrap() * bpm.beat_length();
         time
+    }
+
+    pub fn time_to_beat(&self, time: f64) -> f64 {
+        let mut cur_time = self.offset;
+        match self.bpms.iter().next() {
+            None => return (time - cur_time) * 2.0,
+            Some((first_beat, bpm)) => {
+                let first_beat = first_beat.0.to_f64().unwrap();
+                let end_time = cur_time + first_beat * bpm.beat_length();
+                if time <= end_time {
+                    return first_beat + (time - cur_time) / bpm.beat_length();
+                }
+                cur_time = end_time;
+            }
+        }
+        for ((start_beat, bpm), (end_beat, _)) in self
+            .bpms
+            .iter()
+            .map(|(beat, bpm)| (beat.0.to_f64().unwrap(), bpm))
+            .tuple_windows()
+        {
+            let end_time = cur_time + (end_beat - start_beat) * bpm.beat_length();
+            if time <= end_time {
+                return start_beat + (time - cur_time) / bpm.beat_length();
+            }
+            cur_time = end_time;
+        }
+        let (last_beat, bpm) = self.bpms.iter().next_back().expect("Always exists");
+        let last_beat = last_beat.0.to_f64().unwrap();
+        last_beat + (time - cur_time) / bpm.beat_length()
     }
 }
 
