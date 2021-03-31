@@ -231,8 +231,8 @@ impl AudioOutputCallback {
                 _ => None,
             };
             let mut next = next.unwrap_or(0.0);
+            next *= self.music_volume as f32;
             next += self.sound_effects.iter_mut().map(|x| x.next()).sum::<f64>() as f32;
-            let next = next * self.music_volume as f32;
             let next = next.clamp(-1.5, 1.5); // Prevent too large sound
             *out = S::from(&next);
         }
