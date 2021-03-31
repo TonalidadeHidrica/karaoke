@@ -383,11 +383,12 @@ pub fn iterate_beat_times(
 ) -> impl Iterator<Item = (bool, f64)> {
     let mut beat = start_beat;
     let mut time = beat_to_time(offset, &bpms, &beat);
+    let mut bpm = bpms.iter().next().map_or_else(Default::default, |b| *b.1);
     let mut bpms = bpms.into_iter().peekable();
-    let mut bpm = Bpm::default();
     let mut measures = iterate_measures(measures.into_iter()).peekable();
-    measures.peeking_take_while(|(b, _)| &beat < b).count();
+    measures.peeking_take_while(|(_, end)| end <= &beat).count();
     let mut first_in_measure = measures.peek().expect("iterate_measure is infinite").0 == beat;
+    // dbg!(&beat, &time);
 
     iter::from_fn(move || {
         let ret = Some((first_in_measure, time));
@@ -433,6 +434,13 @@ mod test {
     use itertools::iterate;
     use itertools::Itertools;
     use num::BigRational;
+    use super::beat_to_time;
+
+    macro_rules! bp {
+        ($a: expr) => {
+            BeatPosition::from(BigRational::from_integer($a.into()))
+        }
+    }
 
     #[test]
     fn test_iterate_measures_01() {
@@ -495,6 +503,39 @@ mod test {
     }
 
     #[test]
+    fn test_beat_to_time_01() {
+        let offset = 2.5;
+        let bpms = ordmap![
+            bp!(8) => Bpm(240.0),
+            bp!(16) => Bpm(120.0),
+            BeatPosition::from(BigRational::new(41.into(), 2.into())) => Bpm(240.0) // 20.5
+        ];
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(0)), 2.5);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(1)), 2.75);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(2)), 3.0);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(3)), 3.25);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(4)), 3.5);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(5)), 3.75);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(6)), 4.0);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(7)), 4.25);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(8)), 4.5);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(9)), 4.75);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(10)), 5.00);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(11)), 5.25);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(12)), 5.50);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(13)), 5.75);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(14)), 6.00);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(15)), 6.25);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(16)), 6.5);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(17)), 7.0);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(18)), 7.5);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(19)), 8.0);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(20)), 8.5);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(21)), 8.875);
+        assert_eq!(beat_to_time(offset, &bpms, &bp!(22)), 9.125);
+    }
+
+    #[test]
     fn test_iterate_beat_times_02() {
         let measures = ordmap![
             BeatPosition::from(BigRational::from_integer(16.into())) => MeasureLength::new(3, 4)
@@ -504,23 +545,63 @@ mod test {
             BeatPosition::from(BigRational::from_integer(22.into())) => Bpm(120.0),
             BeatPosition::from(BigRational::new(51.into(), 2.into())) => Bpm(240.0) // 25.5
         ];
-        let got = iterate_beat_times(0.5, measures, bpms, BeatPosition::zero())
+        let got = iterate_beat_times(2.5, measures, bpms, BeatPosition::zero())
             .take(16 + 12)
             .collect_vec();
         assert_eq!(
             got,
             vec![
-                (true, 0.5),
-                (false, 1.0),
-                (false, 1.5),
-                (false, 2.0),
                 (true, 2.5),
+                (false, 2.75),
                 (false, 3.0),
-                (false, 3.5),
+                (false, 3.25),
+                (true, 3.5),
+                (false, 3.75),
                 (false, 4.0),
+                (false, 4.25),
+
                 (true, 4.5),
                 (false, 4.75),
                 (false, 5.0),
+                (false, 5.25),
+                (true, 5.5),
+                (false, 5.75),
+                (false, 6.0),
+                (false, 6.25),
+
+                (true, 6.5),
+                (false, 6.75),
+                (false, 7.0),
+                (true, 7.25),
+                (false, 7.5),
+                (false, 7.75),
+
+                (true, 8.0),
+                (false, 8.5),
+                (false, 9.0),
+                (true, 9.5),
+                (false, 9.875),
+                (false, 10.125),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_iterate_beat_times_03() {
+        let measures = ordmap![
+            BeatPosition::from(BigRational::from_integer(16.into())) => MeasureLength::new(3, 4)
+        ];
+        let bpms = ordmap![
+            BeatPosition::from(BigRational::from_integer(8.into())) => Bpm(240.0),
+            BeatPosition::from(BigRational::from_integer(22.into())) => Bpm(120.0),
+            BeatPosition::from(BigRational::new(51.into(), 2.into())) => Bpm(240.0) // 25.5
+        ];
+        let got = iterate_beat_times(2.5, measures, bpms, BeatPosition::from(BigRational::from_integer(11.into())))
+            .take(16 + 12 - 11)
+            .collect_vec();
+        assert_eq!(
+            got,
+            vec![
                 (false, 5.25),
                 (true, 5.5),
                 (false, 5.75),
