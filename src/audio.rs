@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::BufReader;
 use std::iter;
@@ -14,12 +15,22 @@ use cpal::OutputCallbackInfo;
 use cpal::Sample;
 use cpal::Stream;
 use cpal::StreamConfig;
+use dasp::signal;
+use dasp::signal::ConstHz;
+use dasp::signal::Delay;
+use dasp::signal::FromIterator;
+use dasp::signal::ScaleAmp;
+use dasp::signal::Sine;
+use dasp::signal::Take;
+use dasp::Signal;
 use derive_getters::Getters;
 use rodio::Decoder;
 use tokio::sync::watch;
 use universal_audio_decoder::new_uniform_source_iterator;
 use universal_audio_decoder::TrueUniformSourceIterator;
 
+use crate::dasp_signal_ext::Multiplexed;
+use crate::dasp_signal_ext::SignalExt;
 use crate::error::AudioError;
 
 #[derive(Getters)]
@@ -39,6 +50,7 @@ pub enum AudioCommand {
     SetVolume(f64),
 
     SetSoundEffectSchedules(SESchedulesBox),
+    SetSoundEffectVolume(f64),
 }
 
 pub enum AudioState {
@@ -120,6 +132,7 @@ impl AudioManager {
 }
 
 type MusicSource = TrueUniformSourceIterator<Decoder<BufReader<File>>>;
+type SoundEffect = Multiplexed<Delay<FromIterator<Take<ScaleAmp<Sine<ConstHz>>>>>>;
 
 struct AudioOutputCallback {
     output_stream_config: StreamConfig,
@@ -133,8 +146,11 @@ struct AudioOutputCallback {
     playback_time: f64,
 
     sound_effect_schedules: Peekable<SESchedulesBox>,
+    sound_effects: VecDeque<SoundEffect>,
+    sound_effect_volume: f64,
 }
 
+#[derive(Debug)]
 pub struct SoundEffectSchedule {
     pub time: f64,
     pub frequency: f64,
@@ -147,16 +163,20 @@ impl AudioOutputCallback {
         command_receiver: mpsc::Receiver<AudioCommand>,
         state_sender: watch::Sender<AudioState>,
     ) -> Self {
-        let sound_effect_schedules: SESchedulesBox = Box::new(iter::empty());
         Self {
             output_stream_config,
             command_receiver,
             state_sender,
+
             music: None,
             playing: false,
             music_volume: 0.0,
+
             playback_time: 0.0,
-            sound_effect_schedules: sound_effect_schedules.peekable(),
+
+            sound_effect_schedules: Self::empty_schedules(),
+            sound_effects: VecDeque::new(),
+            sound_effect_volume: 0.0,
         }
     }
 }
@@ -175,19 +195,49 @@ impl AudioOutputCallback {
         }
 
         self.refresh_state(callback_info);
-        if self.playing {
-            self.playback_time += 1.0 / self.output_stream_config.sample_rate.0 as f64
-                * out.len() as f64
-                / self.output_stream_config.channels as f64;
+        let playback_end = self.playback_time
+            + if self.playing {
+                1.0 / self.output_stream_config.sample_rate.0 as f64 * out.len() as f64
+                    / self.output_stream_config.channels as f64
+            } else {
+                0.0
+            };
+
+        while let Some(next) = self.sound_effect_schedules.peek() {
+            if playback_end < next.time {
+                break;
+            }
+            let next = self.sound_effect_schedules.next().expect("Always exists");
+            let wave = signal::from_iter(
+                signal::rate(self.output_stream_config.sample_rate.0 as _)
+                    .const_hz(next.frequency)
+                    .sine()
+                    .scale_amp(self.sound_effect_volume)
+                    .take(self.output_stream_config.sample_rate.0 as usize / 20), // 0.05 seconds
+            )
+            .delay(
+                ((next.time - self.playback_time).max(0.0)
+                    * self.output_stream_config.sample_rate.0 as f64) as _,
+            )
+            .multiplexed(self.output_stream_config.channels as _);
+            self.sound_effects.push_back(wave);
         }
+
+        self.sound_effects.retain(|x| !x.is_exhausted());
 
         for out in out.iter_mut() {
             let next = match &mut self.music {
                 Some(music) if self.playing => music.next(),
                 _ => None,
             };
-            *out = S::from(&(next.unwrap_or(0.0) * self.music_volume as f32));
+            let mut next = next.unwrap_or(0.0);
+            next += self.sound_effects.iter_mut().map(|x| x.next()).sum::<f64>() as f32;
+            let next = next * self.music_volume as f32;
+            let next = next.clamp(-1.5, 1.5); // Prevent too large sound
+            *out = S::from(&next);
         }
+
+        self.playback_time = playback_end;
     }
 
     fn refresh_state(&self, callback_info: &OutputCallbackInfo) {
@@ -206,26 +256,30 @@ impl AudioOutputCallback {
     }
 
     fn process_command(&mut self, command: AudioCommand) {
+        use AudioCommand::*;
         match command {
-            AudioCommand::Play => self.playing = true,
-            AudioCommand::Pause => self.playing = false,
-            AudioCommand::Seek(time) => {
+            Play => self.playing = true,
+            Pause => self.playing = false,
+            Seek(time) => {
                 // TODO negative seek
+                self.sound_effect_schedules = Self::empty_schedules();
+                self.sound_effects.clear();
                 self.playback_time = time;
                 if let Some(music) = &mut self.music {
                     music.seek(time.max(0.0)).unwrap();
                 }
                 self.playing = false;
             }
-            AudioCommand::LoadMusic(path) => {
+            LoadMusic(path) => {
                 if let Err(e) = self.load_music(path) {
                     eprintln!("{}", e);
                 }
             }
-            AudioCommand::SetVolume(vol) => self.music_volume = vol,
-            AudioCommand::SetSoundEffectSchedules(schedules) => {
+            SetVolume(vol) => self.music_volume = vol,
+            SetSoundEffectSchedules(schedules) => {
                 self.sound_effect_schedules = schedules.peekable()
             }
+            SetSoundEffectVolume(vol) => self.sound_effect_volume = vol,
         };
     }
 
@@ -242,5 +296,10 @@ impl AudioOutputCallback {
         S: Sample,
     {
         move |a, b| self.callback(a, b)
+    }
+
+    fn empty_schedules() -> Peekable<SESchedulesBox> {
+        let ret: SESchedulesBox = Box::new(iter::empty());
+        ret.peekable()
     }
 }

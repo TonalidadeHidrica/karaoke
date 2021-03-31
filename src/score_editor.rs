@@ -2,8 +2,10 @@ use std::sync::mpsc;
 
 use crate::audio::AudioCommand;
 use crate::audio::AudioManager;
+use crate::audio::SoundEffectSchedule;
 use crate::bpm_dialog::build_bpm_dialog;
 use crate::measure_dialog::build_measure_dialog;
+use crate::schema::iterate_beat_times;
 use crate::schema::iterate_measures;
 use crate::schema::BeatLength;
 use crate::schema::BeatPosition;
@@ -80,8 +82,11 @@ pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEd
                 .lens(ScoreEditorData::score),
         )
         .with_spacer(20.0)
-        .with_child(Label::new("Volume:"))
+        .with_child(Label::new("Music vol:"))
         .with_child(Slider::new().lens(ScoreEditorData::music_volume))
+        .with_spacer(5.0)
+        .with_child(Label::new("Metronome vol:"))
+        .with_child(Slider::new().lens(ScoreEditorData::metronome_volume))
         .main_axis_alignment(druid::widget::MainAxisAlignment::Start)
         .must_fill_main_axis(true)
         .padding(5.0);
@@ -138,6 +143,7 @@ pub struct ScoreEditorData {
     selected_track: Option<usize>,
     playing_music: bool,
     music_volume: f64,
+    metronome_volume: f64,
 
     music_playback_position: Option<MusicPlaybackPositionData>,
 }
@@ -158,6 +164,7 @@ impl Default for ScoreEditorData {
             selected_track: None,
             playing_music: false,
             music_volume: 0.4,
+            metronome_volume: 0.4,
 
             music_playback_position: None,
         }
@@ -331,7 +338,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
         _env: &Env,
     ) {
         if let LifeCycle::WidgetAdded = event {
-            self.send_music_volume(data);
+            self.send_volume(data);
         }
     }
 
@@ -345,8 +352,8 @@ impl Widget<ScoreEditorData> for ScoreEditor {
         if !old_data.same(data) {
             ctx.request_paint();
         }
-        if old_data.music_volume != data.music_volume {
-            self.send_music_volume(data);
+        if old_data.music_volume != data.music_volume || old_data.metronome_volume != data.metronome_volume {
+            self.send_volume(data);
         }
     }
 
@@ -500,11 +507,15 @@ impl Widget<ScoreEditorData> for ScoreEditor {
 }
 
 impl ScoreEditor {
-    fn send_music_volume(&self, data: &ScoreEditorData) {
+    fn send_volume(&self, data: &ScoreEditorData) {
         self.audio_manager
             .command_sender()
             .send(AudioCommand::SetVolume(data.music_volume))
-            .unwrap()
+            .unwrap();
+        self.audio_manager
+            .command_sender()
+            .send(AudioCommand::SetSoundEffectVolume(data.metronome_volume))
+            .unwrap();
     }
 
     fn edit_measure_length(&self, ctx: &mut EventCtx, data: &ScoreEditorData) {
@@ -558,7 +569,18 @@ impl ScoreEditor {
         } else {
             let pos = data.score.beat_to_time(&data.cursor_position);
             sender.send(AudioCommand::Seek(pos))?;
-            // data.score.
+            sender.send(AudioCommand::SetSoundEffectSchedules(Box::new(
+                iterate_beat_times(
+                    data.score.offset,
+                    data.score.measure_lengths.clone(),
+                    data.score.bpms.clone(),
+                    data.cursor_position.clone(),
+                )
+                .map(|(first, time)| SoundEffectSchedule {
+                    time,
+                    frequency: if first { 440.0 } else { 220.0 },
+                }),
+            )))?;
             sender.send(AudioCommand::Play)?;
             data.playing_music = true;
             ctx.request_anim_frame();
