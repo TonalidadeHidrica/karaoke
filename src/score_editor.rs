@@ -580,7 +580,7 @@ impl ScoreEditor {
                 )
                 .map(|(first, time)| SoundEffectSchedule {
                     time,
-                    frequency: if first { 440.0 } else { 220.0 },
+                    frequency: if first { 1244.51 } else { 739.99 },
                 }),
             )))?;
             sender.send(AudioCommand::Play)?;
