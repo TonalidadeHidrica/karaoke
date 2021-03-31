@@ -645,7 +645,6 @@ mod test {
             (false, 2.75),
             (false, 3.0),
             (false, 3.25),
-
             (true, 3.5),
             (false, 4.0),
             (false, 4.5),

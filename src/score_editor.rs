@@ -352,7 +352,9 @@ impl Widget<ScoreEditorData> for ScoreEditor {
         if !old_data.same(data) {
             ctx.request_paint();
         }
-        if old_data.music_volume != data.music_volume || old_data.metronome_volume != data.metronome_volume {
+        if old_data.music_volume != data.music_volume
+            || old_data.metronome_volume != data.metronome_volume
+        {
             self.send_volume(data);
         }
     }
