@@ -1,5 +1,7 @@
 use std::fs::File;
 use std::io::BufReader;
+use std::iter;
+use std::iter::Peekable;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::mpsc::TryRecvError;
@@ -35,6 +37,8 @@ pub enum AudioCommand {
     LoadMusic(PathBuf),
 
     SetVolume(f64),
+
+    SetSoundEffectSchedules(SESchedulesBox),
 }
 
 pub enum AudioState {
@@ -127,7 +131,15 @@ struct AudioOutputCallback {
     music_volume: f64,
 
     playback_time: f64,
+
+    sound_effect_schedules: Peekable<SESchedulesBox>,
 }
+
+pub struct SoundEffectSchedule {
+    pub time: f64,
+    pub frequency: f64,
+}
+pub type SESchedulesBox = Box<dyn Iterator<Item = SoundEffectSchedule> + Send>;
 
 impl AudioOutputCallback {
     fn new(
@@ -135,6 +147,7 @@ impl AudioOutputCallback {
         command_receiver: mpsc::Receiver<AudioCommand>,
         state_sender: watch::Sender<AudioState>,
     ) -> Self {
+        let sound_effect_schedules: SESchedulesBox = Box::new(iter::empty());
         Self {
             output_stream_config,
             command_receiver,
@@ -143,6 +156,7 @@ impl AudioOutputCallback {
             playing: false,
             music_volume: 0.0,
             playback_time: 0.0,
+            sound_effect_schedules: sound_effect_schedules.peekable(),
         }
     }
 }
@@ -201,6 +215,7 @@ impl AudioOutputCallback {
                 if let Some(music) = &mut self.music {
                     music.seek(time.max(0.0)).unwrap();
                 }
+                self.playing = false;
             }
             AudioCommand::LoadMusic(path) => {
                 if let Err(e) = self.load_music(path) {
@@ -208,6 +223,9 @@ impl AudioOutputCallback {
                 }
             }
             AudioCommand::SetVolume(vol) => self.music_volume = vol,
+            AudioCommand::SetSoundEffectSchedules(schedules) => {
+                self.sound_effect_schedules = schedules.peekable()
+            }
         };
     }
 

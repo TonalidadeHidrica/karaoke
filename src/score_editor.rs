@@ -1,3 +1,5 @@
+use std::sync::mpsc;
+
 use crate::audio::AudioCommand;
 use crate::audio::AudioManager;
 use crate::bpm_dialog::build_bpm_dialog;
@@ -203,18 +205,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     }
                     " " => {
                         if mods.contains(Modifiers::SHIFT) {
-                            let sender = self.audio_manager.command_sender();
-                            if data.playing_music {
-                                sender.send(AudioCommand::Pause).unwrap();
-                                data.playing_music = false;
-                                data.music_playback_position = None;
-                            } else {
-                                let pos = data.score.beat_to_time(&data.cursor_position);
-                                sender.send(AudioCommand::Seek(pos)).unwrap();
-                                sender.send(AudioCommand::Play).unwrap();
-                                data.playing_music = true;
-                                ctx.request_anim_frame();
-                            }
+                            self.toggle_music_play(ctx, data).unwrap();
                         } else {
                             append_element(data, ScoreElementKind::Skip);
                         }
@@ -394,7 +385,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
         let mut measure_lengths = data.score.measure_lengths.iter().peekable();
         let mut bpms = data.score.bpms.iter().peekable();
 
-        for (beat_start, beat_end) in iterate_measures(&data.score.measure_lengths) {
+        for (beat_start, beat_end) in iterate_measures(data.score.measure_lengths.iter()) {
             if &beat_end - &left_beat > BeatLength::from(BigRational::from_integer(16.into())) {
                 let x = get_x(&beat_start - &left_beat);
                 let line = Line::new((x, y), (x, y + line_height));
@@ -552,6 +543,27 @@ impl ScoreEditor {
             )
         });
         ctx.new_window(window_desc);
+    }
+
+    fn toggle_music_play(
+        &self,
+        ctx: &mut EventCtx,
+        data: &mut ScoreEditorData,
+    ) -> Result<(), mpsc::SendError<impl std::any::Any>> {
+        let sender = self.audio_manager.command_sender();
+        if data.playing_music {
+            sender.send(AudioCommand::Pause)?;
+            data.playing_music = false;
+            data.music_playback_position = None;
+        } else {
+            let pos = data.score.beat_to_time(&data.cursor_position);
+            sender.send(AudioCommand::Seek(pos))?;
+            // data.score.
+            sender.send(AudioCommand::Play)?;
+            data.playing_music = true;
+            ctx.request_anim_frame();
+        }
+        Ok(())
     }
 }
 

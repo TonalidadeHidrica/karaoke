@@ -1,6 +1,9 @@
+use std::borrow::Borrow;
+use std::cmp::Ordering::*;
 use std::iter;
 use std::ops::Add;
 use std::ops::AddAssign;
+use std::ops::Mul;
 use std::ops::Sub;
 use std::ops::SubAssign;
 
@@ -175,6 +178,38 @@ impl Bpm {
     }
 }
 
+impl Mul<Bpm> for &BeatLength {
+    type Output = f64;
+
+    fn mul(self, rhs: Bpm) -> Self::Output {
+        self.0.to_f64().unwrap() * rhs.beat_length()
+    }
+}
+
+impl Mul<Bpm> for BeatLength {
+    type Output = f64;
+
+    fn mul(self, rhs: Bpm) -> Self::Output {
+        &self * rhs
+    }
+}
+
+impl Mul<&BeatLength> for Bpm {
+    type Output = f64;
+
+    fn mul(self, rhs: &BeatLength) -> Self::Output {
+        rhs * self
+    }
+}
+
+impl Mul<BeatLength> for Bpm {
+    type Output = f64;
+
+    fn mul(self, rhs: BeatLength) -> Self::Output {
+        rhs * self
+    }
+}
+
 #[derive(Clone, Default, Debug, Data, Lens)]
 pub struct Score {
     pub tracks: Vector<Track>,
@@ -185,56 +220,61 @@ pub struct Score {
 
 impl Score {
     pub fn beat_to_time(&self, pos: &BeatPosition) -> f64 {
-        let mut time = self.offset;
-        match self.bpms.iter().next() {
-            None => return time + pos.0.to_f64().unwrap() / 2.0, // Assume BPM=120
-            Some((first_beat, bpm)) => {
-                time += first_beat.min(pos).0.to_f64().unwrap() * bpm.beat_length();
-                if pos <= first_beat {
-                    return time;
-                }
-            }
-        }
-        for ((start_beat, bpm), (end_beat, _)) in self.bpms.iter().tuple_windows() {
-            time += (end_beat.min(pos) - start_beat).0.to_f64().unwrap() * bpm.beat_length();
-            if pos <= end_beat {
+        beat_to_time(self.offset, &self.bpms, pos)
+    }
+    pub fn time_to_beat(&self, time: f64) -> f64 {
+        time_to_beat(self.offset, &self.bpms, time)
+    }
+}
+pub fn beat_to_time(offset: f64, bpms: &OrdMap<BeatPosition, Bpm>, pos: &BeatPosition) -> f64 {
+    let mut time = offset;
+    match bpms.iter().next() {
+        None => return time + pos.0.to_f64().unwrap() / 2.0, // Assume BPM=120
+        Some((first_beat, bpm)) => {
+            time += first_beat.min(pos).0.to_f64().unwrap() * bpm.beat_length();
+            if pos <= first_beat {
                 return time;
             }
         }
-        let (last_beat, bpm) = self.bpms.iter().next_back().expect("Always exists");
-        time += (pos - last_beat).0.to_f64().unwrap() * bpm.beat_length();
-        time
     }
-
-    pub fn time_to_beat(&self, time: f64) -> f64 {
-        let mut cur_time = self.offset;
-        match self.bpms.iter().next() {
-            None => return (time - cur_time) * 2.0,
-            Some((first_beat, bpm)) => {
-                let first_beat = first_beat.0.to_f64().unwrap();
-                let end_time = cur_time + first_beat * bpm.beat_length();
-                if time <= end_time {
-                    return first_beat + (time - cur_time) / bpm.beat_length();
-                }
-                cur_time = end_time;
-            }
+    for ((start_beat, bpm), (end_beat, _)) in bpms.iter().tuple_windows() {
+        time += (end_beat.min(pos) - start_beat).0.to_f64().unwrap() * bpm.beat_length();
+        if pos <= end_beat {
+            return time;
         }
-        for ((start_beat, bpm), (end_beat, _)) in self
-            .bpms
-            .iter()
-            .map(|(beat, bpm)| (beat.0.to_f64().unwrap(), bpm))
-            .tuple_windows()
-        {
-            let end_time = cur_time + (end_beat - start_beat) * bpm.beat_length();
+    }
+    let (last_beat, bpm) = bpms.iter().next_back().expect("Always exists");
+    time += (pos - last_beat).0.to_f64().unwrap() * bpm.beat_length();
+    time
+}
+
+pub fn time_to_beat(offset: f64, bpms: &OrdMap<BeatPosition, Bpm>, time: f64) -> f64 {
+    let mut cur_time = offset;
+    match bpms.iter().next() {
+        None => return (time - cur_time) * 2.0,
+        Some((first_beat, bpm)) => {
+            let first_beat = first_beat.0.to_f64().unwrap();
+            let end_time = cur_time + first_beat * bpm.beat_length();
             if time <= end_time {
-                return start_beat + (time - cur_time) / bpm.beat_length();
+                return first_beat + (time - cur_time) / bpm.beat_length();
             }
             cur_time = end_time;
         }
-        let (last_beat, bpm) = self.bpms.iter().next_back().expect("Always exists");
-        let last_beat = last_beat.0.to_f64().unwrap();
-        last_beat + (time - cur_time) / bpm.beat_length()
     }
+    for ((start_beat, bpm), (end_beat, _)) in bpms
+        .iter()
+        .map(|(beat, bpm)| (beat.0.to_f64().unwrap(), bpm))
+        .tuple_windows()
+    {
+        let end_time = cur_time + (end_beat - start_beat) * bpm.beat_length();
+        if time <= end_time {
+            return start_beat + (time - cur_time) / bpm.beat_length();
+        }
+        cur_time = end_time;
+    }
+    let (last_beat, bpm) = bpms.iter().next_back().expect("Always exists");
+    let last_beat = last_beat.0.to_f64().unwrap();
+    last_beat + (time - cur_time) / bpm.beat_length()
 }
 
 #[derive(Clone, Debug, Data)]
@@ -299,24 +339,34 @@ impl Track {
     }
 }
 
-pub fn iterate_measures(
-    measures: &OrdMap<BeatPosition, MeasureLength>,
-) -> impl Iterator<Item = (BeatPosition, BeatPosition)> + '_ {
-    let mut measure_lengths = measures.iter().peekable();
+pub fn iterate_measures<'a, BP, ML>(
+    measures: impl Iterator<Item = (BP, ML)> + 'a,
+) -> impl Iterator<Item = (BeatPosition, BeatPosition)> + 'a
+where
+    BP: Borrow<BeatPosition>,
+    ML: Borrow<MeasureLength>,
+{
+    let mut measure_lengths = measures.peekable();
     let mut measure_length = BeatLength::four();
     let mut measure_start_beat = BeatPosition::zero();
 
     iter::from_fn(move || {
         let mut measure_end_beat = &measure_start_beat + &measure_length;
         if let Some((next_measure_beat, next_measure_length)) = measure_lengths.peek() {
-            if next_measure_beat == &&measure_start_beat {
-                measure_length = (*next_measure_length).to_owned().into();
-                measure_end_beat = &measure_start_beat + &measure_length;
-                measure_lengths.next();
-            } else if next_measure_beat < &&measure_end_beat {
-                measure_length = (*next_measure_length).to_owned().into();
-                measure_end_beat = (*next_measure_beat).to_owned();
-                measure_lengths.next();
+            let next_measure_beat = next_measure_beat.borrow();
+            let next_measure_length = next_measure_length.borrow();
+            match next_measure_beat.cmp(&measure_start_beat) {
+                Equal => {
+                    measure_length = (*next_measure_length).to_owned().into();
+                    measure_end_beat = &measure_start_beat + &measure_length;
+                    measure_lengths.next();
+                }
+                Less => {
+                    measure_length = (*next_measure_length).to_owned().into();
+                    measure_end_beat = (*next_measure_beat).to_owned();
+                    measure_lengths.next();
+                }
+                Greater => {}
             }
         }
         let ret = Some((measure_start_beat.clone(), measure_end_beat.clone()));
@@ -325,10 +375,59 @@ pub fn iterate_measures(
     })
 }
 
+pub fn iterate_beat_times(
+    offset: f64,
+    measures: OrdMap<BeatPosition, MeasureLength>,
+    bpms: OrdMap<BeatPosition, Bpm>,
+    start_beat: BeatPosition,
+) -> impl Iterator<Item = (bool, f64)> {
+    let mut beat = start_beat;
+    let mut time = beat_to_time(offset, &bpms, &beat);
+    let mut bpms = bpms.into_iter().peekable();
+    let mut bpm = Bpm::default();
+    let mut measures = iterate_measures(measures.into_iter()).peekable();
+    measures.peeking_take_while(|(b, _)| &beat < b).count();
+    let mut first_in_measure = measures.peek().expect("iterate_measure is infinite").0 == beat;
+
+    iter::from_fn(move || {
+        let ret = Some((first_in_measure, time));
+        // println!("{:?}", ret);
+        let next_beat_in_measure = &beat + &BeatLength::one();
+        let next_measure_beat = &measures.peek().expect("iterate_measures is infinite").1;
+        let (next_first_in_measure, next_beat) = match next_measure_beat.cmp(&next_beat_in_measure)
+        {
+            Less | Equal => {
+                measures.next();
+                (
+                    true,
+                    &measures.peek().expect("iterate_measures is infinite").0,
+                )
+            }
+            Greater => (false, &next_beat_in_measure),
+        };
+        while let Some((next_bpm_beat, next_bpm)) = bpms.peek().filter(|b| &b.0 < next_beat) {
+            // println!("  {:?} {:?} => {:?} {:?}", beat, bpm, next_bpm_beat, next_bpm);
+            time += bpm * (next_bpm_beat - &beat);
+            beat = next_bpm_beat.clone();
+            bpm = *next_bpm;
+            bpms.next();
+        }
+        time += bpm * (next_beat - &beat);
+        beat = next_beat.clone();
+        first_in_measure = next_first_in_measure;
+        // println!("   => {:?} {:?}", time, beat);
+        ret
+    })
+}
+
 #[cfg(test)]
 mod test {
+    use std::iter;
+
+    use super::iterate_beat_times;
     use super::iterate_measures;
     use super::BeatPosition;
+    use super::Bpm;
     use super::MeasureLength;
     use druid::im::ordmap;
     use itertools::iterate;
@@ -337,8 +436,9 @@ mod test {
 
     #[test]
     fn test_iterate_measures_01() {
-        let measures = ordmap![];
-        let got = iterate_measures(&measures).take(10).collect_vec();
+        let got = iterate_measures(iter::empty::<(BeatPosition, MeasureLength)>())
+            .take(10)
+            .collect_vec();
         let expected = iterate(0, |x| x + 4)
             .map(|x| BeatPosition::from(BigRational::from_integer(x.into())))
             .tuple_windows::<(_, _)>()
@@ -352,7 +452,9 @@ mod test {
         let measures = ordmap![
             BeatPosition::from(BigRational::from_integer(16.into())) => MeasureLength::new(3, 4)
         ];
-        let got = iterate_measures(&measures).take(10).collect_vec();
+        let got = iterate_measures(measures.into_iter())
+            .take(10)
+            .collect_vec();
         let expected = vec![0, 4, 8, 12, 16, 19, 22, 25, 28, 31, 34]
             .into_iter()
             .map(|x| BeatPosition::from(BigRational::from_integer(x.into())))
@@ -366,12 +468,79 @@ mod test {
         let measures = ordmap![
             BeatPosition::zero() => MeasureLength::new(3, 4)
         ];
-        let got = iterate_measures(&measures).take(10).collect_vec();
+        let got = iterate_measures(measures.into_iter())
+            .take(10)
+            .collect_vec();
         let expected = iterate(0, |x| x + 3)
             .map(|x| BeatPosition::from(BigRational::from_integer(x.into())))
             .tuple_windows::<(_, _)>()
             .take(10)
             .collect_vec();
         assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn test_iterate_beat_times_01() {
+        let measures = ordmap![];
+        let bpms = ordmap![];
+        let got = iterate_beat_times(0.0, measures, bpms, BeatPosition::zero())
+            .take(10)
+            .collect_vec();
+        let expected = iterate(0.0, |x| x + 0.5)
+            .enumerate()
+            .map(|(i, x)| (i % 4 == 0, x))
+            .take(10)
+            .collect_vec();
+        assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn test_iterate_beat_times_02() {
+        let measures = ordmap![
+            BeatPosition::from(BigRational::from_integer(16.into())) => MeasureLength::new(3, 4)
+        ];
+        let bpms = ordmap![
+            BeatPosition::from(BigRational::from_integer(8.into())) => Bpm(240.0),
+            BeatPosition::from(BigRational::from_integer(22.into())) => Bpm(120.0),
+            BeatPosition::from(BigRational::new(51.into(), 2.into())) => Bpm(240.0) // 25.5
+        ];
+        let got = iterate_beat_times(0.5, measures, bpms, BeatPosition::zero())
+            .take(16 + 12)
+            .collect_vec();
+        assert_eq!(
+            got,
+            vec![
+                (true, 0.5),
+                (false, 1.0),
+                (false, 1.5),
+                (false, 2.0),
+                (true, 2.5),
+                (false, 3.0),
+                (false, 3.5),
+                (false, 4.0),
+                (true, 4.5),
+                (false, 4.75),
+                (false, 5.0),
+                (false, 5.25),
+                (true, 5.5),
+                (false, 5.75),
+                (false, 6.0),
+                (false, 6.25),
+
+                (true, 6.5),
+                (false, 6.75),
+                (false, 7.0),
+                (true, 7.25),
+                (false, 7.5),
+                (false, 7.75),
+
+                (true, 8.0),
+                (false, 8.5),
+                (false, 9.0),
+                (true, 9.5),
+                (false, 9.875),
+                (false, 10.125),
+            ]
+        );
     }
 }
