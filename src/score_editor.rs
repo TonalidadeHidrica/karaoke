@@ -1,3 +1,7 @@
+use std::cmp::Reverse;
+use std::collections::binary_heap::PeekMut;
+use std::collections::BinaryHeap;
+use std::mem::replace;
 use std::sync::mpsc;
 
 use crate::audio::AudioCommand;
@@ -35,6 +39,7 @@ use druid::KeyEvent;
 use druid::Lens;
 use druid::LifeCycle;
 use druid::Modifiers;
+use druid::PaintCtx;
 use druid::Rect;
 use druid::RenderContext;
 use druid::Selector;
@@ -47,6 +52,8 @@ use itertools::Itertools;
 use num::BigRational;
 use num::ToPrimitive;
 use num::Zero;
+
+use self::layouts::*;
 
 pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEditorData> {
     let status_bar = Flex::row()
@@ -93,7 +100,10 @@ pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEd
 
     Flex::column()
         .with_child(status_bar)
-        .with_child(ScoreEditor { audio_manager })
+        .with_child(ScoreEditor {
+            audio_manager,
+            layout_cache: Vec::new(),
+        })
 }
 
 fn beat_label_string(data: &ScoreEditorData) -> String {
@@ -173,6 +183,44 @@ impl Default for ScoreEditorData {
 
 struct ScoreEditor {
     audio_manager: AudioManager,
+    layout_cache: Vec<ScoreRow>,
+}
+
+struct ScoreRow {
+    beat_start: BeatPosition,
+    beat_end: BeatPosition,
+    bar_lines: Vec<BeatPosition>,
+    y: f64,
+    tracks: Vec<TrackView>,
+}
+
+impl ScoreRow {
+    fn beat_delta(&self, pos: &BeatPosition) -> BeatLength {
+        pos - &self.beat_start
+    }
+
+    fn contains_beat(&self, pos: &BeatPosition) -> bool {
+        (&self.beat_start..&self.beat_end).contains(&pos)
+    }
+}
+
+struct TrackView {
+    index: usize,
+    y: f64,
+    beat_start: BeatPosition,
+    beat_end: BeatPosition,
+}
+
+impl ScoreRow {
+    fn new(beat_start: BeatPosition, beat_end: BeatPosition, bar_lines: Vec<BeatPosition>) -> Self {
+        Self {
+            beat_start,
+            beat_end,
+            bar_lines,
+            y: 0.0,
+            tracks: Vec::new(),
+        }
+    }
 }
 
 fn cursor_delta_candidates() -> impl DoubleEndedIterator<Item = BeatLength> {
@@ -195,6 +243,17 @@ pub struct SetBpmCommand {
 }
 
 selector! { EDIT_BPM_SELECTOR: SingleUse<SetBpmCommand> }
+
+mod layouts {
+    use druid::Insets;
+
+    pub(crate) const BEAT_WIDTH: f64 = 60.0;
+    pub(crate) const LINE_HEIGHT: f64 = 15.0;
+    pub(crate) const NOTE_HEIGHT: f64 = 24.0;
+    pub(crate) const NOTE_FULL_HEIGHT: f64 = 32.0;
+    pub(crate) const LINE_MARGIN: f64 = 5.0;
+    pub(crate) const SCORE_EDITOR_INSETS: Insets = Insets::uniform(-8.0);
+}
 
 impl Widget<ScoreEditorData> for ScoreEditor {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut ScoreEditorData, _env: &Env) {
@@ -350,6 +409,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
         _env: &druid::Env,
     ) {
         if !old_data.same(data) {
+            ctx.request_layout();
             ctx.request_paint();
         }
         if old_data.music_volume != data.music_volume
@@ -363,149 +423,243 @@ impl Widget<ScoreEditorData> for ScoreEditor {
         &mut self,
         _ctx: &mut druid::LayoutCtx,
         bc: &druid::BoxConstraints,
-        _data: &ScoreEditorData,
+        data: &ScoreEditorData,
         _env: &druid::Env,
     ) -> druid::Size {
-        // TODO example says that we have to check if constraints is bounded
-        bc.max()
-    }
+        let max_beat_length_in_row = BigRational::from_float(
+            ((bc.max().width + SCORE_EDITOR_INSETS.x_value()) / BEAT_WIDTH).trunc(),
+        )
+        .map(BeatLength::from)
+        .max(Some(BeatLength::one()))
+        .unwrap();
 
-    fn paint(&mut self, ctx: &mut druid::PaintCtx, data: &ScoreEditorData, env: &druid::Env) {
-        let insets = Insets::uniform(-8.0);
-        let draw_rect = ctx.size().to_rect().inset(insets); // .inset(status_bar_inset);
-        let beat_width = 60.0;
-        let line_height = 15.0;
-        let line_margin = 5.0;
-
-        let mut y = draw_rect.min_y();
-        let mut left_beat: BeatPosition = BeatPosition::zero();
-        let get_x =
-            |length: BeatLength| draw_rect.min_x() + length.0.to_f64().unwrap() * beat_width;
         let display_end_beat = data
             .score
             .tracks
             .iter()
             .map(|x| x.end_beat())
             .max()
-            .unwrap_or_else(|| data.cursor_position.to_owned())
-            .max(data.cursor_position.to_owned());
-        let display_end_beat = display_end_beat + BeatLength::four();
+            .as_ref()
+            .max(data.music_playback_position.as_ref().map(|p| &p.beat))
+            .unwrap_or_else(|| &data.cursor_position)
+            .max(&data.cursor_position)
+            + &BeatLength::one();
+
+        self.layout_cache = split_into_rows(data, max_beat_length_in_row, display_end_beat);
+
+        struct Wrap<'a>(usize, &'a Track);
+        impl PartialEq for Wrap<'_> {
+            fn eq(&self, other: &Self) -> bool {
+                self.cmp(other) == std::cmp::Ordering::Equal
+            }
+        }
+        impl PartialOrd for Wrap<'_> {
+            fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+                Some(self.cmp(other))
+            }
+        }
+        impl Eq for Wrap<'_> {}
+        impl Ord for Wrap<'_> {
+            fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+                self.1.start_beat().cmp(other.1.start_beat()).reverse()
+            }
+        }
+        let mut track_queue: BinaryHeap<_> = data
+            .score
+            .tracks
+            .iter()
+            .enumerate()
+            .map(|(a, b)| Wrap(a, b))
+            .collect();
+        let mut shown_track = Vec::new();
+
+        let mut y = 0.0;
+
+        for row in self.layout_cache.iter_mut() {
+            row.y = y;
+            y += LINE_HEIGHT;
+
+            while let Some(track) = track_queue
+                .peek_mut()
+                .and_then(|t| (t.1.start_beat() < &row.beat_end).then(|| PeekMut::pop(t)))
+            {
+                shown_track.push(track);
+            }
+            shown_track.retain(|t| row.beat_start < t.1.end_beat());
+
+            let mut available_slots = BinaryHeap::<Reverse<usize>>::new();
+            let mut end_queue = BinaryHeap::<Reverse<(BeatPosition, usize)>>::new();
+            for &Wrap(index, track) in shown_track.iter() {
+                let beat_start = track.start_beat().clone().max(row.beat_start.clone());
+                let beat_end = track.end_beat().min(row.beat_end.clone());
+                while let Some(popped) = end_queue
+                    .peek_mut()
+                    .and_then(|p| (p.0 .0 <= beat_start).then(|| PeekMut::pop(p)))
+                {
+                    available_slots.push(Reverse(popped.0 .1));
+                }
+                let slot = available_slots.pop().map_or(end_queue.len(), |x| x.0);
+                end_queue.push(Reverse((beat_end.clone(), slot)));
+                row.tracks.push(TrackView {
+                    index,
+                    y: y + slot as f64 * NOTE_FULL_HEIGHT,
+                    beat_start,
+                    beat_end,
+                });
+            }
+            y += (available_slots.len() + end_queue.len()) as f64 * NOTE_FULL_HEIGHT + LINE_MARGIN;
+        }
+        bc.max()
+    }
+
+    fn paint(&mut self, ctx: &mut PaintCtx, data: &ScoreEditorData, env: &druid::Env) {
+        let draw_rect = ctx.size().to_rect().inset(SCORE_EDITOR_INSETS); // .inset(status_bar_inset);
+        let get_x =
+            |length: BeatLength| draw_rect.min_x() + length.0.to_f64().unwrap() * BEAT_WIDTH;
 
         let mut measure_lengths = data.score.measure_lengths.iter().peekable();
         let mut bpms = data.score.bpms.iter().peekable();
 
-        for (beat_start, beat_end) in iterate_measures(data.score.measure_lengths.iter()) {
-            if &beat_end - &left_beat > BeatLength::from(BigRational::from_integer(16.into())) {
-                let x = get_x(&beat_start - &left_beat);
-                let line = Line::new((x, y), (x, y + line_height));
+        for row in self.layout_cache.iter() {
+            let get_x = |pos: &BeatPosition| get_x(row.beat_delta(pos));
+
+            // Draw bar lines at the first of each measure
+            for beat in row.bar_lines.iter() {
+                let x = get_x(&beat);
+                let line = Line::new((x, row.y), (x, row.y + LINE_HEIGHT));
                 ctx.stroke(line, &Color::GRAY, 2.0);
-
-                let start_y = y;
-
-                y += line_height;
-                // FIXME: Naive and inefficient!
-                for (i, track) in data.score.tracks.iter().enumerate() {
-                    let selected = data.selected_track.map_or(false, |j| i == j);
-                    y += draw_track(
-                        ctx,
-                        get_x,
-                        &track,
-                        selected,
-                        &draw_rect,
-                        y,
-                        &left_beat,
-                        &beat_start,
-                    );
-                }
-
-                if (&left_beat..&beat_start).contains(&&data.cursor_position) {
-                    draw_cursor(ctx, get_x, &data.cursor_position, start_y, y, &left_beat);
-                }
-                if let Some(beat) = data.music_playback_position.as_ref().map(|p| &p.beat) {
-                    if (&left_beat..&beat_start).contains(&&beat) {
-                        draw_cursor(ctx, get_x, &beat, start_y, y, &left_beat);
-                    }
-                }
-
-                y += line_margin;
-                left_beat = beat_start.clone();
             }
 
-            let x = get_x(&beat_start - &left_beat);
-            let line = Line::new((x, y), (x, y + line_height));
-            ctx.stroke(line, &Color::GRAY, 2.0);
-
-            if beat_start < display_end_beat {
-                for b in iterate(beat_start.clone(), |x| x + &BeatLength::one())
+            // Draw the other bar lines
+            for (start, end) in row.bar_lines.iter().tuple_windows() {
+                for beat in iterate(start.clone(), |x| x + &BeatLength::one())
                     .skip(1)
-                    .take_while(|b| b < &beat_end)
+                    .take_while(|b| b < &end)
                 {
-                    let x = get_x(&b - &left_beat);
-                    let line = Line::new((x, y + 2.0), (x, y + line_height));
+                    let x = get_x(&beat);
+                    let line = Line::new((x, row.y + 2.0), (x, row.y + LINE_HEIGHT));
                     ctx.stroke(line, &Color::GRAY, 1.0);
                 }
+            }
 
-                for (beat, measure) in measure_lengths
-                    .peeking_take_while(|(b, _)| (&beat_start..&beat_end).contains(b))
-                {
-                    let x = get_x(beat - &left_beat);
-                    let layout = ctx
-                        .text()
-                        .new_text_layout(format!("{}", measure))
-                        .text_color(env.get(LABEL_COLOR))
-                        .build();
-                    match layout {
-                        Ok(layout) => ctx.draw_text(&layout, (x, y)),
-                        Err(e) => eprintln!("{}", e),
-                    }
-                }
-
-                for (beat, bpm) in
-                    bpms.peeking_take_while(|(b, _)| (&beat_start..&beat_end).contains(b))
-                {
-                    // TODO duplicates?
-                    let x = get_x(beat - &left_beat);
-                    let layout = ctx
-                        .text()
-                        .new_text_layout(format!("{:.2}", bpm.0))
-                        .text_color(env.get(LABEL_COLOR))
-                        .build();
-                    match layout {
-                        Ok(layout) => ctx.draw_text(&layout, (x, y)),
-                        Err(e) => eprintln!("{}", e),
-                    }
+            // Draw curosr
+            if row.contains_beat(&data.cursor_position) {
+                draw_cursor(ctx, get_x, &data.cursor_position, row.y);
+            }
+            // Draw music playback cursor
+            if let Some(beat) = data.music_playback_position.as_ref().map(|p| &p.beat) {
+                if row.contains_beat(&beat) {
+                    draw_cursor(ctx, get_x, &beat, row.y);
                 }
             }
 
-            if display_end_beat <= beat_start {
-                let start_y = y;
-                y += line_height;
-                for (i, track) in data.score.tracks.iter().enumerate() {
-                    let selected = data.selected_track.map_or(false, |j| i == j);
-                    y += draw_track(
-                        ctx,
-                        get_x,
-                        &track,
-                        selected,
-                        &draw_rect,
-                        y,
-                        &left_beat,
-                        &beat_start,
-                    );
-                }
-                if (&left_beat..=&beat_start).contains(&&data.cursor_position) {
-                    draw_cursor(ctx, get_x, &data.cursor_position, start_y, y, &left_beat);
-                }
-                if let Some(beat) = data.music_playback_position.as_ref().map(|p| &p.beat) {
-                    if (&left_beat..&beat_start).contains(&&beat) {
-                        draw_cursor(ctx, get_x, &beat, start_y, y, &left_beat);
-                    }
-                }
+            // Draw tracks
+            for track_view in row.tracks.iter() {
+                let track = &data.score.tracks[track_view.index];
+                draw_track(
+                    ctx,
+                    get_x,
+                    row,
+                    track_view,
+                    track,
+                    data.selected_track.map_or(false, |j| track_view.index == j),
+                    &draw_rect,
+                );
+            }
 
-                break;
+            // draw measure labels
+            for (beat, measure) in measure_lengths.peeking_take_while(|(b, _)| row.contains_beat(b))
+            {
+                let layout = ctx
+                    .text()
+                    .new_text_layout(format!("{}", measure))
+                    .text_color(env.get(LABEL_COLOR))
+                    .build();
+                match layout {
+                    Ok(layout) => ctx.draw_text(&layout, (get_x(beat), row.y)),
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
+
+            // draw beat labels
+            for (beat, bpm) in bpms.peeking_take_while(|(b, _)| row.contains_beat(b)) {
+                // TODO duplicates?
+                let layout = ctx
+                    .text()
+                    .new_text_layout(format!("{:.2}", bpm.0))
+                    .text_color(env.get(LABEL_COLOR))
+                    .build();
+                match layout {
+                    Ok(layout) => ctx.draw_text(&layout, (get_x(beat), row.y)),
+                    Err(e) => eprintln!("{}", e),
+                }
             }
         }
     }
+}
+
+fn split_into_rows(
+    data: &ScoreEditorData,
+    max_beat_length_in_row: BeatLength,
+    display_end_beat: BeatPosition,
+) -> Vec<ScoreRow> {
+    let mut rows = Vec::new();
+    let mut bar_lines = Vec::new();
+    let mut row_start_beat = BeatPosition::zero();
+    'outer_loop: for (measure_start_beat, measure_end_beat) in
+        iterate_measures(data.score.measure_lengths.iter())
+    {
+        bar_lines.push(measure_start_beat.clone());
+        let request_newline = &measure_end_beat - &row_start_beat > max_beat_length_in_row;
+        let request_finish = &display_end_beat <= &measure_start_beat;
+        // If neither of the two condiditions hold, we do not have to do anything now
+        if !(request_newline || request_finish) {
+            continue;
+        }
+        // Otherwise, we should output anything before the current measure
+        if row_start_beat != measure_start_beat {
+            rows.push(ScoreRow::new(
+                row_start_beat.clone(),
+                measure_start_beat.clone(),
+                bar_lines,
+            ));
+            bar_lines = vec![measure_start_beat.clone()];
+        }
+        if request_finish {
+            break;
+        }
+        row_start_beat = if &measure_end_beat - &measure_start_beat > max_beat_length_in_row {
+            // If the current measure is longer than the upper bound,
+            // split the measure into chunks.
+            // In this branch, request_newline is always true, so the previous lines has been
+            // already flushed.
+            for (chunk_start, chunk_end) in
+                iterate(measure_start_beat, |beat| beat + &max_beat_length_in_row)
+                    .tuple_windows()
+                    .take_while(|(start, _)| start <= &measure_end_beat)
+            {
+                let chunk_end = (&chunk_end).min(&measure_end_beat);
+                let mut chunk_bar_lines = replace(&mut bar_lines, Vec::new());
+                if chunk_end == &measure_end_beat {
+                    chunk_bar_lines.push(measure_end_beat.clone());
+                }
+                rows.push(ScoreRow::new(
+                    chunk_start.clone(),
+                    chunk_end.clone(),
+                    chunk_bar_lines,
+                ));
+                if &display_end_beat <= chunk_end {
+                    break 'outer_loop;
+                }
+            }
+            // Current measure shuold NOT be output in the following process.
+            measure_end_beat
+        } else {
+            // Current measure should be output in the following process.
+            measure_start_beat
+        }
+    }
+    rows
 }
 
 impl ScoreEditor {
@@ -604,45 +758,38 @@ fn append_element(data: &mut ScoreEditorData, kind: ScoreElementKind) {
 
 #[allow(clippy::too_many_arguments)]
 fn draw_track(
-    ctx: &mut druid::PaintCtx,
-    get_x: impl Fn(BeatLength) -> f64,
-    track: &crate::schema::Track,
+    ctx: &mut PaintCtx,
+    get_x: impl Fn(&BeatPosition) -> f64,
+    row: &ScoreRow,
+    track_view: &TrackView,
+    track: &Track,
     selected: bool,
     draw_rect: &Rect,
-    y: f64,
-    beat_left: &BeatPosition,
-    beat_right: &BeatPosition,
-) -> f64 {
-    let note_height = 24.0;
-    let note_full_height = 32.0;
-
+) {
     let track_end_beat = track.end_beat();
-    if beat_right <= track.start_beat() || &track_end_beat <= beat_left {
-        return 0.0;
-    }
     ctx.with_save(|ctx| {
         let rect = Rect::new(
             draw_rect.min_x(),
-            y,
-            get_x(beat_right - beat_left),
-            y + note_full_height,
+            track_view.y,
+            get_x(&row.beat_end),
+            track_view.y + NOTE_FULL_HEIGHT,
         );
         ctx.clip(rect);
         let rect = rect.inset(Insets::uniform_xy(
             0.0,
-            (note_height - note_full_height) / 2.0,
+            (NOTE_HEIGHT - NOTE_FULL_HEIGHT) / 2.0,
         ));
 
         {
-            let min_x = if track.start_beat() < beat_left {
+            let min_x = if track.start_beat() < &row.beat_start {
                 rect.min_x() - 20.0
             } else {
-                get_x(track.start_beat() - beat_left)
+                get_x(track.start_beat())
             };
-            let max_x = if beat_right < &track_end_beat {
+            let max_x = if &row.beat_end < &track_end_beat {
                 rect.max_x() + 20.0
             } else {
-                get_x(&track_end_beat - beat_left)
+                get_x(&track_end_beat)
             };
             let rect = Rect::new(min_x, rect.min_y(), max_x, rect.max_y()).to_rounded_rect(4.0);
             let (fill_brush, stroke_brush) = match selected {
@@ -656,32 +803,28 @@ fn draw_track(
         let rect = rect.inset(Insets::uniform_xy(0.0, -6.0));
 
         for (note_start_beat, note_end_beat, _) in track.iterate_notes() {
-            if &note_end_beat < beat_left || beat_right < &note_start_beat {
+            if &note_end_beat < &row.beat_start || &row.beat_end < &note_start_beat {
                 continue;
             }
             let rect = Rect::new(
-                get_x(&note_start_beat - beat_left),
+                get_x(&note_start_beat),
                 rect.min_y(),
-                get_x(&note_end_beat - beat_left),
+                get_x(&note_end_beat),
                 rect.max_y(),
             )
             .to_rounded_rect(5.0);
             ctx.fill(rect, &Color::rgb8(172, 255, 84));
         }
     });
-
-    note_full_height
 }
 
 fn draw_cursor(
-    ctx: &mut druid::PaintCtx,
-    get_x: impl Fn(BeatLength) -> f64,
+    ctx: &mut PaintCtx,
+    get_x: impl Fn(&BeatPosition) -> f64,
     cursor_position: &BeatPosition,
     min_y: f64,
-    max_y: f64,
-    beat_left: &BeatPosition,
 ) {
-    let x = get_x(cursor_position - beat_left);
-    let line = Line::new((x, min_y), (x, max_y));
+    let x = get_x(cursor_position);
+    let line = Line::new((x, min_y), (x, min_y + LINE_HEIGHT));
     ctx.stroke(line, &Color::GREEN, 3.0);
 }

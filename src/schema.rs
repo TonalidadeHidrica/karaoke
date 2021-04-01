@@ -19,9 +19,9 @@ use num::One;
 use num::ToPrimitive;
 use num::Zero;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, From, Debug, Data)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, From, Debug, derive_more::Display, Data)]
 pub struct BeatPosition(#[data(same_fn = "PartialEq::eq")] pub BigRational);
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, From, Debug, Data)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, From, Debug, derive_more::Display, Data)]
 pub struct BeatLength(#[data(same_fn = "PartialEq::eq")] pub BigRational);
 
 impl BeatPosition {
