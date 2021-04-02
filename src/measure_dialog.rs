@@ -8,7 +8,7 @@ use druid::Widget;
 use druid::WidgetExt;
 use druid::WidgetId;
 
-use crate::data_owner::DataOwner;
+use crate::druid_supplemental::widget_ext_ext::WidgetExtExt;
 use crate::schema::BeatPosition;
 use crate::schema::MeasureLength;
 use crate::score_editor::SetMeasureLengthCommand;
@@ -62,7 +62,8 @@ pub fn build_measure_dialog<T>(
     }
     buttons.add_child(Button::new("Cancel").on_click(|ctx, _, _| ctx.window().close()));
 
-    let flex = Flex::column().with_child(editor).with_child(buttons);
-
-    DataOwner::new(measure_length, flex)
+    Flex::column()
+        .with_child(editor)
+        .with_child(buttons)
+        .owning_data(measure_length)
 }

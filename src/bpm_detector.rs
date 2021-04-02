@@ -46,8 +46,10 @@ pub fn build_bpm_detector_widget() -> impl Widget<BpmDetectorData> {
                 .with_child(Label::new("Detected offset:"))
                 .with_child(TextBox::new().lens(BpmDetectorData::detected_offset)),
         )
-        .with_child(Label::dynamic(|data: &BpmDetectorData, _| match data.linest_result {
-            None => "".to_owned(),
-            Some(res) => format!("R^2 = {}", res.r2),
+        .with_child(Label::dynamic(|data: &BpmDetectorData, _| {
+            match data.linest_result {
+                None => "".to_owned(),
+                Some(res) => format!("R^2 = {}", res.r2),
+            }
         }))
 }

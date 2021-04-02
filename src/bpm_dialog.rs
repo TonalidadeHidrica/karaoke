@@ -7,7 +7,7 @@ use druid::SingleUse;
 use druid::Widget;
 use druid::WidgetId;
 
-use crate::data_owner::DataOwner;
+use crate::druid_supplemental::widget_ext_ext::WidgetExtExt;
 use crate::schema::BeatPosition;
 use crate::schema::Bpm;
 use crate::score_editor::SetBpmCommand;
@@ -53,7 +53,8 @@ pub fn build_bpm_dialog<T>(
     }
     buttons.add_child(Button::new("Cancel").on_click(|ctx, _, _| ctx.window().close()));
 
-    let flex = Flex::column().with_child(editor).with_child(buttons);
-
-    DataOwner::new(bpm, flex)
+    Flex::column()
+        .with_child(editor)
+        .with_child(buttons)
+        .owning_data(bpm)
 }
