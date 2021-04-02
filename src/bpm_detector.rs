@@ -1,4 +1,5 @@
 use druid::im::Vector;
+use druid::widget::Button;
 use druid::widget::Flex;
 use druid::widget::Label;
 use druid::widget::TextBox;
@@ -52,4 +53,8 @@ pub fn build_bpm_detector_widget() -> impl Widget<BpmDetectorData> {
                 Some(res) => format!("R^2 = {}", res.r2),
             }
         }))
+        .with_child(
+            Button::new("Clear")
+                .on_click(|_, data: &mut BpmDetectorData, _| *data = BpmDetectorData::default()),
+        )
 }
