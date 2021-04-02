@@ -730,15 +730,15 @@ impl ScoreEditor {
         let cursor_position = data.cursor_position.to_owned();
         let (already_exsits, current_measure_length) =
             match data.score.measure_lengths.range(..=&cursor_position).last() {
-                None => (false, BeatLength::four()),
-                Some((k, v)) => (k == &cursor_position, v.to_owned().into()),
+                None => (false, MeasureLength::default()),
+                Some((k, v)) => (k == &cursor_position, v.to_owned()),
             };
         let widget_id = ctx.widget_id();
         let window_desc = WindowDesc::new(move || {
             build_measure_dialog::<ScoreEditorData>(
                 widget_id,
                 cursor_position.to_owned(),
-                current_measure_length.into(),
+                current_measure_length,
                 already_exsits,
             )
         });
