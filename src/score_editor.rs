@@ -7,6 +7,8 @@ use std::sync::mpsc;
 use crate::audio::AudioCommand;
 use crate::audio::AudioManager;
 use crate::audio::SoundEffectSchedule;
+use crate::bpm_detector::build_bpm_detector_widget;
+use crate::bpm_detector::BpmDetectorData;
 use crate::bpm_dialog::build_bpm_dialog;
 use crate::measure_dialog::build_measure_dialog;
 use crate::schema::iterate_beat_times;
@@ -154,6 +156,7 @@ pub struct ScoreEditorData {
     playing_music: bool,
     music_volume: f64,
     metronome_volume: f64,
+    bpm_detector_data: BpmDetectorData,
 
     music_playback_position: Option<MusicPlaybackPositionData>,
 }
@@ -175,6 +178,7 @@ impl Default for ScoreEditorData {
             playing_music: false,
             music_volume: 0.4,
             metronome_volume: 0.4,
+            bpm_detector_data: BpmDetectorData::default(),
 
             music_playback_position: None,
         }
@@ -311,6 +315,12 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     }
                     "m" => self.edit_measure_length(ctx, data),
                     "b" => self.edit_bpm(ctx, data),
+                    "B" => self.open_bpm_detector(ctx),
+                    "/" => {
+                        if let Some(time) = self.audio_manager.playback_position() {
+                            data.bpm_detector_data.push(time);
+                        }
+                    }
                     _ => {}
                 },
                 Key::Backspace => {
@@ -710,6 +720,13 @@ impl ScoreEditor {
             )
         });
         ctx.new_window(window_desc);
+    }
+
+    fn open_bpm_detector(&self, ctx: &mut EventCtx) {
+        let window_desc = WindowDesc::new(|| {
+            build_bpm_detector_widget().lens(ScoreEditorData::bpm_detector_data)
+        });
+        ctx.new_window(window_desc)
     }
 
     fn toggle_music_play(
