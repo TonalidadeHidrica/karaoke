@@ -2,6 +2,7 @@ use std::cmp::Reverse;
 use std::collections::binary_heap::PeekMut;
 use std::collections::BinaryHeap;
 use std::mem::replace;
+use std::ops::Range;
 use std::sync::mpsc;
 
 use crate::audio::AudioCommand;
@@ -23,12 +24,15 @@ use crate::schema::ScoreElementKind;
 use crate::schema::Track;
 use druid::keyboard_types::Key;
 use druid::kurbo::Line;
+use druid::piet::IntoBrush;
+use druid::piet::Piet;
 use druid::piet::Text;
 use druid::piet::TextLayoutBuilder;
 use druid::text::format::ParseFormatter;
 use druid::theme::LABEL_COLOR;
 use druid::widget::Flex;
 use druid::widget::Label;
+use druid::widget::Scroll;
 use druid::widget::Slider;
 use druid::widget::TextBox;
 use druid::Color;
@@ -41,11 +45,13 @@ use druid::KeyEvent;
 use druid::Lens;
 use druid::LifeCycle;
 use druid::Modifiers;
+use druid::MouseEvent;
 use druid::PaintCtx;
 use druid::Rect;
 use druid::RenderContext;
 use druid::Selector;
 use druid::SingleUse;
+use druid::Size;
 use druid::Widget;
 use druid::WidgetExt;
 use druid::WindowDesc;
@@ -100,12 +106,18 @@ pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEd
         .must_fill_main_axis(true)
         .padding(5.0);
 
-    Flex::column()
-        .with_child(status_bar)
-        .with_child(ScoreEditor {
-            audio_manager,
-            layout_cache: Vec::new(),
-        })
+    let score_editor = ScoreEditor {
+        audio_manager,
+        layout_cache: Vec::new(),
+        hover_cursor: None,
+    };
+
+    Flex::column().with_child(status_bar).with_flex_child(
+        Scroll::new(score_editor.padding(Insets::uniform(8.0)))
+            .vertical()
+            .expand_height(),
+        1.0,
+    )
 }
 
 fn beat_label_string(data: &ScoreEditorData) -> String {
@@ -188,6 +200,7 @@ impl Default for ScoreEditorData {
 struct ScoreEditor {
     audio_manager: AudioManager,
     layout_cache: Vec<ScoreRow>,
+    hover_cursor: Option<BeatPosition>,
 }
 
 struct ScoreRow {
@@ -195,6 +208,7 @@ struct ScoreRow {
     beat_end: BeatPosition,
     bar_lines: Vec<BeatPosition>,
     y: f64,
+    y_max: f64,
     tracks: Vec<TrackView>,
 }
 
@@ -206,13 +220,17 @@ impl ScoreRow {
     fn contains_beat(&self, pos: &BeatPosition) -> bool {
         (&self.beat_start..&self.beat_end).contains(&pos)
     }
+
+    fn y_range(&self) -> Range<f64> {
+        self.y..self.y_max
+    }
 }
 
 struct TrackView {
     index: usize,
     y: f64,
-    beat_start: BeatPosition,
-    beat_end: BeatPosition,
+    _beat_start: BeatPosition,
+    _beat_end: BeatPosition,
 }
 
 impl ScoreRow {
@@ -222,6 +240,7 @@ impl ScoreRow {
             beat_end,
             bar_lines,
             y: 0.0,
+            y_max: 0.0,
             tracks: Vec::new(),
         }
     }
@@ -249,14 +268,11 @@ pub struct SetBpmCommand {
 selector! { EDIT_BPM_SELECTOR: SingleUse<SetBpmCommand> }
 
 mod layouts {
-    use druid::Insets;
-
     pub(crate) const BEAT_WIDTH: f64 = 60.0;
     pub(crate) const LINE_HEIGHT: f64 = 15.0;
     pub(crate) const NOTE_HEIGHT: f64 = 24.0;
     pub(crate) const NOTE_FULL_HEIGHT: f64 = 32.0;
     pub(crate) const LINE_MARGIN: f64 = 5.0;
-    pub(crate) const SCORE_EDITOR_INSETS: Insets = Insets::uniform(-8.0);
 }
 
 impl Widget<ScoreEditorData> for ScoreEditor {
@@ -359,7 +375,19 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 }
                 _ => {}
             },
-            Event::MouseDown(..) => ctx.request_focus(),
+            Event::MouseMove(event) => {
+                let hover_cursor = self.handle_mouse_move(data, event);
+                if self.hover_cursor != hover_cursor {
+                    ctx.request_paint();
+                }
+                self.hover_cursor = hover_cursor;
+            }
+            Event::MouseDown(..) => {
+                ctx.request_focus();
+                if let Some(beat) = &self.hover_cursor {
+                    data.cursor_position = beat.clone();
+                }
+            }
             Event::Command(command) => {
                 if let Some(command) = command
                     .get(EDIT_MEAUSRE_LENGTH_SELECTOR)
@@ -419,6 +447,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
         _env: &druid::Env,
     ) {
         if !old_data.same(data) {
+            self.hover_cursor = None;
             ctx.request_layout();
             ctx.request_paint();
         }
@@ -436,12 +465,10 @@ impl Widget<ScoreEditorData> for ScoreEditor {
         data: &ScoreEditorData,
         _env: &druid::Env,
     ) -> druid::Size {
-        let max_beat_length_in_row = BigRational::from_float(
-            ((bc.max().width + SCORE_EDITOR_INSETS.x_value()) / BEAT_WIDTH).trunc(),
-        )
-        .map(BeatLength::from)
-        .max(Some(BeatLength::one()))
-        .unwrap();
+        let max_beat_length_in_row = BigRational::from_float((bc.max().width / BEAT_WIDTH).trunc())
+            .map(BeatLength::from)
+            .max(Some(BeatLength::one()))
+            .unwrap();
 
         let display_end_beat = data
             .score
@@ -455,7 +482,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             .max(&data.cursor_position)
             + &BeatLength::one();
 
-        self.layout_cache = split_into_rows(data, max_beat_length_in_row, display_end_beat);
+        self.layout_cache = split_into_rows(data, &max_beat_length_in_row, &display_end_beat);
 
         struct Wrap<'a>(usize, &'a Track);
         impl PartialEq for Wrap<'_> {
@@ -485,7 +512,11 @@ impl Widget<ScoreEditorData> for ScoreEditor {
 
         let mut y = 0.0;
 
-        for row in self.layout_cache.iter_mut() {
+        for (i, row) in self.layout_cache.iter_mut().enumerate() {
+            if i > 0 {
+                y += LINE_MARGIN;
+            }
+
             row.y = y;
             y += LINE_HEIGHT;
 
@@ -513,17 +544,22 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 row.tracks.push(TrackView {
                     index,
                     y: y + slot as f64 * NOTE_FULL_HEIGHT,
-                    beat_start,
-                    beat_end,
+                    _beat_start: beat_start,
+                    _beat_end: beat_end,
                 });
             }
-            y += (available_slots.len() + end_queue.len()) as f64 * NOTE_FULL_HEIGHT + LINE_MARGIN;
+            y += (available_slots.len() + end_queue.len()) as f64 * NOTE_FULL_HEIGHT;
+            row.y_max = y;
         }
-        bc.max()
+
+        // let width = max_beat_length_in_row.0.to_f64().unwrap() * BEAT_WIDTH;
+        let width = bc.max().width;
+        let height = y;
+        Size::new(width, height)
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &ScoreEditorData, env: &druid::Env) {
-        let draw_rect = ctx.size().to_rect().inset(SCORE_EDITOR_INSETS); // .inset(status_bar_inset);
+        let draw_rect = ctx.size().to_rect();
         let get_x =
             |length: BeatLength| draw_rect.min_x() + length.0.to_f64().unwrap() * BEAT_WIDTH;
 
@@ -554,12 +590,18 @@ impl Widget<ScoreEditorData> for ScoreEditor {
 
             // Draw curosr
             if row.contains_beat(&data.cursor_position) {
-                draw_cursor(ctx, get_x, &data.cursor_position, row.y);
+                draw_cursor(ctx, get_x, &data.cursor_position, row.y, &Color::GREEN, 3.0);
             }
             // Draw music playback cursor
             if let Some(beat) = data.music_playback_position.as_ref().map(|p| &p.beat) {
                 if row.contains_beat(&beat) {
-                    draw_cursor(ctx, get_x, &beat, row.y);
+                    draw_cursor(ctx, get_x, beat, row.y, &Color::NAVY, 3.0);
+                }
+            }
+            // Draw hover cursor
+            if let Some(beat) = &self.hover_cursor {
+                if row.contains_beat(&beat) {
+                    draw_cursor(ctx, get_x, beat, row.y, &Color::AQUA, 1.0);
                 }
             }
 
@@ -610,8 +652,8 @@ impl Widget<ScoreEditorData> for ScoreEditor {
 
 fn split_into_rows(
     data: &ScoreEditorData,
-    max_beat_length_in_row: BeatLength,
-    display_end_beat: BeatPosition,
+    max_beat_length_in_row: &BeatLength,
+    display_end_beat: &BeatPosition,
 ) -> Vec<ScoreRow> {
     let mut rows = Vec::new();
     let mut bar_lines = Vec::new();
@@ -620,8 +662,8 @@ fn split_into_rows(
         iterate_measures(data.score.measure_lengths.iter())
     {
         bar_lines.push(measure_start_beat.clone());
-        let request_newline = &measure_end_beat - &row_start_beat > max_beat_length_in_row;
-        let request_finish = &display_end_beat <= &measure_start_beat;
+        let request_newline = &(&measure_end_beat - &row_start_beat) > max_beat_length_in_row;
+        let request_finish = display_end_beat <= &measure_start_beat;
         // If neither of the two condiditions hold, we do not have to do anything now
         if !(request_newline || request_finish) {
             continue;
@@ -638,7 +680,7 @@ fn split_into_rows(
         if request_finish {
             break;
         }
-        row_start_beat = if &measure_end_beat - &measure_start_beat > max_beat_length_in_row {
+        row_start_beat = if &(&measure_end_beat - &measure_start_beat) > max_beat_length_in_row {
             // If the current measure is longer than the upper bound,
             // split the measure into chunks.
             // In this branch, request_newline is always true, so the previous lines has been
@@ -658,7 +700,7 @@ fn split_into_rows(
                     chunk_end.clone(),
                     chunk_bar_lines,
                 ));
-                if &display_end_beat <= chunk_end {
+                if display_end_beat <= chunk_end {
                     break 'outer_loop;
                 }
             }
@@ -760,6 +802,20 @@ impl ScoreEditor {
         }
         Ok(())
     }
+
+    fn handle_mouse_move(
+        &mut self,
+        _data: &mut ScoreEditorData,
+        event: &MouseEvent,
+    ) -> Option<BeatPosition> {
+        let row = self
+            .layout_cache
+            .iter()
+            .find(|row| row.y_range().contains(&&event.pos.y))?;
+        let length = BeatLength(BigRational::from_float((event.pos.x / BEAT_WIDTH).trunc())?);
+        let beat = &row.beat_start + &length;
+        row.contains_beat(&beat).then(|| beat)
+    }
 }
 
 fn append_element(data: &mut ScoreEditorData, kind: ScoreElementKind) {
@@ -835,13 +891,15 @@ fn draw_track(
     });
 }
 
-fn draw_cursor(
-    ctx: &mut PaintCtx,
+fn draw_cursor<'c>(
+    ctx: &mut PaintCtx<'_, '_, 'c>,
     get_x: impl Fn(&BeatPosition) -> f64,
     cursor_position: &BeatPosition,
     min_y: f64,
+    brush: &impl IntoBrush<Piet<'c>>,
+    width: f64,
 ) {
     let x = get_x(cursor_position);
     let line = Line::new((x, min_y), (x, min_y + LINE_HEIGHT));
-    ctx.stroke(line, &Color::GREEN, 3.0);
+    ctx.stroke(line, brush, width);
 }
