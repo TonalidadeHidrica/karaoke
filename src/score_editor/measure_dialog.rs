@@ -8,11 +8,11 @@ use druid::Widget;
 use druid::WidgetExt;
 use druid::WidgetId;
 
+use super::commands::SetMeasureLengthCommand;
+use super::commands::EDIT_MEAUSRE_LENGTH_SELECTOR;
 use crate::druid_supplemental::widget_ext_ext::WidgetExtExt;
 use crate::schema::BeatPosition;
 use crate::schema::MeasureLength;
-use crate::score_editor::SetMeasureLengthCommand;
-use crate::score_editor::EDIT_MEAUSRE_LENGTH_SELECTOR;
 
 pub fn build_measure_dialog<T>(
     widget_id: WidgetId,

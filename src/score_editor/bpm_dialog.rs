@@ -7,11 +7,11 @@ use druid::SingleUse;
 use druid::Widget;
 use druid::WidgetId;
 
+use super::commands::SetBpmCommand;
+use super::commands::EDIT_BPM_SELECTOR;
 use crate::druid_supplemental::widget_ext_ext::WidgetExtExt;
 use crate::schema::BeatPosition;
 use crate::schema::Bpm;
-use crate::score_editor::SetBpmCommand;
-use crate::score_editor::EDIT_BPM_SELECTOR;
 
 // TODO: almost the same to build_measure_dialog
 pub fn build_bpm_dialog<T>(

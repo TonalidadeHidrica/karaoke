@@ -1,25 +1,17 @@
 use std::cmp::Reverse;
 use std::collections::binary_heap::PeekMut;
 use std::collections::BinaryHeap;
-use std::mem::replace;
 use std::ops::Range;
 use std::sync::mpsc;
 
 use crate::audio::AudioCommand;
 use crate::audio::AudioManager;
 use crate::audio::SoundEffectSchedule;
-use crate::bpm_detector::build_bpm_detector_widget;
-use crate::bpm_detector::BpmDetectorData;
-use crate::bpm_dialog::build_bpm_dialog;
-use crate::measure_dialog::build_measure_dialog;
 use crate::schema::iterate_beat_times;
-use crate::schema::iterate_measures;
 use crate::schema::BeatLength;
 use crate::schema::BeatPosition;
 use crate::schema::Bpm;
 use crate::schema::MeasureLength;
-use crate::schema::Score;
-use crate::schema::ScoreElement;
 use crate::schema::ScoreElementKind;
 use crate::schema::Track;
 use druid::keyboard_types::Key;
@@ -28,13 +20,7 @@ use druid::piet::IntoBrush;
 use druid::piet::Piet;
 use druid::piet::Text;
 use druid::piet::TextLayoutBuilder;
-use druid::text::format::ParseFormatter;
 use druid::theme::LABEL_COLOR;
-use druid::widget::Flex;
-use druid::widget::Label;
-use druid::widget::Scroll;
-use druid::widget::Slider;
-use druid::widget::TextBox;
 use druid::Color;
 use druid::Data;
 use druid::Env;
@@ -42,14 +28,12 @@ use druid::Event;
 use druid::EventCtx;
 use druid::Insets;
 use druid::KeyEvent;
-use druid::Lens;
 use druid::LifeCycle;
 use druid::Modifiers;
 use druid::MouseEvent;
 use druid::PaintCtx;
 use druid::Rect;
 use druid::RenderContext;
-use druid::Selector;
 use druid::SingleUse;
 use druid::Size;
 use druid::Widget;
@@ -59,182 +43,40 @@ use itertools::iterate;
 use itertools::Itertools;
 use num::BigRational;
 use num::ToPrimitive;
-use num::Zero;
 
-use self::layouts::*;
+use super::bpm_detector::build_bpm_detector_widget;
+use super::bpm_dialog::build_bpm_dialog;
+use super::commands::EDIT_BPM_SELECTOR;
+use super::commands::EDIT_MEAUSRE_LENGTH_SELECTOR;
+use super::data::MusicPlaybackPositionData;
+use super::data::ScoreEditorData;
+use super::layouts::*;
+use super::measure_dialog::build_measure_dialog;
+use super::misc::append_element;
+use super::misc::cursor_delta_candidates;
+use super::misc::split_into_rows;
 
-pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEditorData> {
-    let status_bar = Flex::row()
-        .with_child(
-            Label::dynamic(|data: &ScoreEditorData, _| beat_label_string(data)).fix_width(50.0),
-        )
-        .with_spacer(20.0)
-        .with_child(
-            Label::dynamic(|len: &BeatLength, _| {
-                format!("{}-th note", BigRational::from_integer(4.into()) / &len.0)
-            })
-            .fix_width(80.0)
-            .lens(ScoreEditorData::cursor_delta),
-        )
-        .with_spacer(20.0)
-        .with_child(
-            Label::dynamic(|data: &ScoreEditorData, _| {
-                let display_time = match &data.music_playback_position {
-                    Some(pos) => pos.time,
-                    None => data.score.beat_to_time(&data.cursor_position),
-                };
-                format_time(display_time)
-            })
-            .fix_width(80.0),
-        )
-        .with_spacer(20.0)
-        .with_child(Label::new("Offset:"))
-        .with_child(
-            TextBox::new()
-                .with_formatter(ParseFormatter::new())
-                .update_data_while_editing(true)
-                .lens(Score::offset)
-                .lens(ScoreEditorData::score),
-        )
-        .with_spacer(20.0)
-        .with_child(Label::new("Music vol:"))
-        .with_child(Slider::new().lens(ScoreEditorData::music_volume))
-        .with_spacer(5.0)
-        .with_child(Label::new("Metronome vol:"))
-        .with_child(Slider::new().lens(ScoreEditorData::metronome_volume))
-        .main_axis_alignment(druid::widget::MainAxisAlignment::Start)
-        .must_fill_main_axis(true)
-        .padding(5.0);
-
-    let score_editor = ScoreEditor {
-        audio_manager,
-        layout_cache: Vec::new(),
-        hover_cursor: None,
-    };
-
-    Flex::column().with_child(status_bar).with_flex_child(
-        Scroll::new(score_editor.padding(Insets::uniform(8.0)))
-            .vertical()
-            .expand_height(),
-        1.0,
-    )
+pub struct ScoreEditor {
+    pub(super) audio_manager: AudioManager,
+    pub(super) layout_cache: Vec<ScoreRow>,
+    pub(super) hover_cursor: Option<BeatPosition>,
 }
 
-fn beat_label_string(data: &ScoreEditorData) -> String {
-    let (playing, pos) = match data.music_playback_position.as_ref() {
-        Some(pos) => (true, &pos.beat),
-        None => (false, &data.cursor_position),
-    };
-    let (start_beat, len) = match data.score.measure_lengths.range(..=pos).next_back() {
-        Some((a, b)) => (a.to_owned(), b.to_owned().into()),
-        None => (BeatPosition::zero(), BeatLength::four()),
-    };
-    let delta_beat = (pos - &start_beat).0;
-    let measure_index = (&delta_beat / &len.0).trunc();
-    let beat = &delta_beat - &measure_index * &len.0;
-    let fraction_str = if playing {
-        format!("{:.0}", beat.to_f64().unwrap().trunc())
-    } else {
-        format_beat_position(&BeatPosition::from(beat))
-    };
-    format!("{}:{}", measure_index, fraction_str)
-}
-
-fn format_beat_position(pos: &BeatPosition) -> String {
-    let fract = match pos.0.fract() {
-        a if a == BigRational::zero() => String::new(),
-        a => format!("+{}", a),
-    };
-    format!("{}{}", pos.0.trunc(), fract)
-}
-
-fn format_time(time: f64) -> String {
-    let millis = ((time + 0.0005) * 1000.0) as u64;
-    format!(
-        "{}:{:02}.{:03}",
-        millis / 60000,
-        millis % 60000 / 1000,
-        millis % 1000
-    )
-}
-
-#[derive(Clone, Debug, Data, Lens)]
-pub struct ScoreEditorData {
-    score: Score,
-
-    cursor_position: BeatPosition,
-    cursor_delta: BeatLength,
-    selected_track: Option<usize>,
-    playing_music: bool,
-    music_volume: f64,
-    metronome_volume: f64,
-    bpm_detector_data: BpmDetectorData,
-
-    music_playback_position: Option<MusicPlaybackPositionData>,
-}
-
-#[derive(Clone, Debug, Data)]
-pub struct MusicPlaybackPositionData {
-    time: f64,
-    beat: BeatPosition,
-}
-
-impl Default for ScoreEditorData {
-    fn default() -> Self {
-        ScoreEditorData {
-            score: Score::default(),
-
-            cursor_position: BeatPosition::zero(),
-            cursor_delta: BeatLength::one(),
-            selected_track: None,
-            playing_music: false,
-            music_volume: 0.4,
-            metronome_volume: 0.4,
-            bpm_detector_data: BpmDetectorData::default(),
-
-            music_playback_position: None,
-        }
-    }
-}
-
-struct ScoreEditor {
-    audio_manager: AudioManager,
-    layout_cache: Vec<ScoreRow>,
-    hover_cursor: Option<BeatPosition>,
-}
-
-struct ScoreRow {
-    beat_start: BeatPosition,
-    beat_end: BeatPosition,
-    bar_lines: Vec<BeatPosition>,
-    y: f64,
-    y_max: f64,
-    tracks: Vec<TrackView>,
+pub struct ScoreRow {
+    pub beat_start: BeatPosition,
+    pub beat_end: BeatPosition,
+    pub bar_lines: Vec<BeatPosition>,
+    pub y: f64,
+    pub y_max: f64,
+    pub tracks: Vec<TrackView>,
 }
 
 impl ScoreRow {
-    fn beat_delta(&self, pos: &BeatPosition) -> BeatLength {
-        pos - &self.beat_start
-    }
-
-    fn contains_beat(&self, pos: &BeatPosition) -> bool {
-        (&self.beat_start..&self.beat_end).contains(&pos)
-    }
-
-    fn y_range(&self) -> Range<f64> {
-        self.y..self.y_max
-    }
-}
-
-struct TrackView {
-    index: usize,
-    y: f64,
-    _beat_start: BeatPosition,
-    _beat_end: BeatPosition,
-}
-
-impl ScoreRow {
-    fn new(beat_start: BeatPosition, beat_end: BeatPosition, bar_lines: Vec<BeatPosition>) -> Self {
+    pub fn new(
+        beat_start: BeatPosition,
+        beat_end: BeatPosition,
+        bar_lines: Vec<BeatPosition>,
+    ) -> Self {
         Self {
             beat_start,
             beat_end,
@@ -244,35 +86,25 @@ impl ScoreRow {
             tracks: Vec::new(),
         }
     }
+
+    pub fn beat_delta(&self, pos: &BeatPosition) -> BeatLength {
+        pos - &self.beat_start
+    }
+
+    pub fn contains_beat(&self, pos: &BeatPosition) -> bool {
+        (&self.beat_start..&self.beat_end).contains(&pos)
+    }
+
+    pub fn y_range(&self) -> Range<f64> {
+        self.y..self.y_max
+    }
 }
 
-fn cursor_delta_candidates() -> impl DoubleEndedIterator<Item = BeatLength> {
-    vec![4, 8, 12, 16, 24, 32]
-        .into_iter()
-        .map(|x| BeatLength::from(BigRational::new(4.into(), x.into())))
-}
-
-#[derive(Debug)]
-pub struct SetMeasureLengthCommand {
-    pub position: BeatPosition,
-    pub measure_length: Option<MeasureLength>,
-}
-
-selector! { EDIT_MEAUSRE_LENGTH_SELECTOR: SingleUse<SetMeasureLengthCommand> }
-
-pub struct SetBpmCommand {
-    pub position: BeatPosition,
-    pub bpm: Option<Bpm>,
-}
-
-selector! { EDIT_BPM_SELECTOR: SingleUse<SetBpmCommand> }
-
-mod layouts {
-    pub(crate) const BEAT_WIDTH: f64 = 60.0;
-    pub(crate) const LINE_HEIGHT: f64 = 15.0;
-    pub(crate) const NOTE_HEIGHT: f64 = 24.0;
-    pub(crate) const NOTE_FULL_HEIGHT: f64 = 32.0;
-    pub(crate) const LINE_MARGIN: f64 = 5.0;
+pub struct TrackView {
+    index: usize,
+    y: f64,
+    _beat_start: BeatPosition,
+    _beat_end: BeatPosition,
 }
 
 impl Widget<ScoreEditorData> for ScoreEditor {
@@ -650,70 +482,6 @@ impl Widget<ScoreEditorData> for ScoreEditor {
     }
 }
 
-fn split_into_rows(
-    data: &ScoreEditorData,
-    max_beat_length_in_row: &BeatLength,
-    display_end_beat: &BeatPosition,
-) -> Vec<ScoreRow> {
-    let mut rows = Vec::new();
-    let mut bar_lines = Vec::new();
-    let mut row_start_beat = BeatPosition::zero();
-    'outer_loop: for (measure_start_beat, measure_end_beat) in
-        iterate_measures(data.score.measure_lengths.iter())
-    {
-        bar_lines.push(measure_start_beat.clone());
-        let request_newline = &(&measure_end_beat - &row_start_beat) > max_beat_length_in_row;
-        let request_finish = display_end_beat <= &measure_start_beat;
-        // If neither of the two condiditions hold, we do not have to do anything now
-        if !(request_newline || request_finish) {
-            continue;
-        }
-        // Otherwise, we should output anything before the current measure
-        if row_start_beat != measure_start_beat {
-            rows.push(ScoreRow::new(
-                row_start_beat.clone(),
-                measure_start_beat.clone(),
-                bar_lines,
-            ));
-            bar_lines = vec![measure_start_beat.clone()];
-        }
-        if request_finish {
-            break;
-        }
-        row_start_beat = if &(&measure_end_beat - &measure_start_beat) > max_beat_length_in_row {
-            // If the current measure is longer than the upper bound,
-            // split the measure into chunks.
-            // In this branch, request_newline is always true, so the previous lines has been
-            // already flushed.
-            for (chunk_start, chunk_end) in
-                iterate(measure_start_beat, |beat| beat + &max_beat_length_in_row)
-                    .tuple_windows()
-                    .take_while(|(start, _)| start <= &measure_end_beat)
-            {
-                let chunk_end = (&chunk_end).min(&measure_end_beat);
-                let mut chunk_bar_lines = replace(&mut bar_lines, Vec::new());
-                if chunk_end == &measure_end_beat {
-                    chunk_bar_lines.push(measure_end_beat.clone());
-                }
-                rows.push(ScoreRow::new(
-                    chunk_start.clone(),
-                    chunk_end.clone(),
-                    chunk_bar_lines,
-                ));
-                if display_end_beat <= chunk_end {
-                    break 'outer_loop;
-                }
-            }
-            // Current measure shuold NOT be output in the following process.
-            measure_end_beat
-        } else {
-            // Current measure should be output in the following process.
-            measure_start_beat
-        }
-    }
-    rows
-}
-
 impl ScoreEditor {
     fn send_volume(&self, data: &ScoreEditorData) {
         self.audio_manager
@@ -815,17 +583,6 @@ impl ScoreEditor {
         let length = BeatLength(BigRational::from_float((event.pos.x / BEAT_WIDTH).trunc())?);
         let beat = &row.beat_start + &length;
         row.contains_beat(&beat).then(|| beat)
-    }
-}
-
-fn append_element(data: &mut ScoreEditorData, kind: ScoreElementKind) {
-    let length = data.cursor_delta.to_owned();
-    if let Some(track) = data
-        .selected_track
-        .and_then(|i| data.score.tracks.get_mut(i))
-    {
-        track.elements.push_back(ScoreElement { kind, length });
-        data.cursor_position += &data.cursor_delta;
     }
 }
 
