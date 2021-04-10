@@ -16,6 +16,7 @@ use druid::widget::Flex;
 use druid::widget::Label;
 use druid::widget::Scroll;
 use druid::widget::Slider;
+use druid::widget::Split;
 use druid::widget::TextBox;
 use druid::Insets;
 use druid::Widget;
@@ -77,10 +78,18 @@ pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEd
         hover_cursor: None,
     };
 
-    Flex::column().with_child(status_bar).with_flex_child(
+    let score_editor = Flex::column().with_child(status_bar).with_flex_child(
         Scroll::new(score_editor.padding(Insets::uniform(8.0)))
             .vertical()
             .expand_height(),
         1.0,
-    )
+    );
+
+    let lyrics_editor = TextBox::multiline()
+        .lens(Score::lyrics)
+        .lens(ScoreEditorData::score);
+
+    Split::columns(score_editor, lyrics_editor)
+        .split_point(0.8)
+        .draggable(true)
 }

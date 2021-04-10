@@ -216,6 +216,7 @@ pub struct Score {
     pub measure_lengths: OrdMap<BeatPosition, MeasureLength>,
     pub bpms: OrdMap<BeatPosition, Bpm>,
     pub offset: f64,
+    pub lyrics: String,
 }
 
 impl Score {
