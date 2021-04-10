@@ -1,4 +1,4 @@
-use druid::text::format::ParseFormatter;
+use druid::text::ParseFormatter;
 use druid::widget::Button;
 use druid::widget::Flex;
 use druid::widget::Label;

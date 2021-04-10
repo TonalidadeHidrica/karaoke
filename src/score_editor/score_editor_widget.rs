@@ -502,14 +502,12 @@ impl ScoreEditor {
                 Some((k, v)) => (k == &cursor_position, v.to_owned()),
             };
         let widget_id = ctx.widget_id();
-        let window_desc = WindowDesc::new(move || {
-            build_measure_dialog::<ScoreEditorData>(
-                widget_id,
-                cursor_position.to_owned(),
-                current_measure_length,
-                already_exsits,
-            )
-        });
+        let window_desc = WindowDesc::new(build_measure_dialog::<ScoreEditorData>(
+            widget_id,
+            cursor_position.to_owned(),
+            current_measure_length,
+            already_exsits,
+        ));
         ctx.new_window(window_desc);
     }
 
@@ -521,21 +519,18 @@ impl ScoreEditor {
             Some((k, v)) => (k == &cursor_position, *v),
         };
         let widget_id = ctx.widget_id();
-        let window_desc = WindowDesc::new(move || {
-            build_bpm_dialog::<ScoreEditorData>(
-                widget_id,
-                cursor_position.to_owned(),
-                current_bpm,
-                already_exsits,
-            )
-        });
+        let window_desc = WindowDesc::new(build_bpm_dialog::<ScoreEditorData>(
+            widget_id,
+            cursor_position.to_owned(),
+            current_bpm,
+            already_exsits,
+        ));
         ctx.new_window(window_desc);
     }
 
     fn open_bpm_detector(&self, ctx: &mut EventCtx) {
-        let window_desc = WindowDesc::new(|| {
-            build_bpm_detector_widget().lens(ScoreEditorData::bpm_detector_data)
-        });
+        let window_desc =
+            WindowDesc::new(build_bpm_detector_widget().lens(ScoreEditorData::bpm_detector_data));
         ctx.new_window(window_desc)
     }
 

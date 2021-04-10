@@ -15,10 +15,9 @@ fn main() -> Result<(), EditorError> {
             .unwrap();
     };
     let data = ScoreEditorData::default();
-    let window =
-        WindowDesc::new(|| build_toplevel_widget(audio_manager)).window_size((1440.0, 810.0));
+    let window = WindowDesc::new(build_toplevel_widget(audio_manager)).window_size((1440.0, 810.0));
     AppLauncher::with_window(window)
-        .use_simple_logger()
+        .log_to_console()
         .launch(data)?;
     Ok(())
 }

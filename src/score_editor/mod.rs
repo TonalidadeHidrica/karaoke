@@ -11,7 +11,7 @@ mod score_editor_widget;
 use crate::audio::AudioManager;
 use crate::schema::BeatLength;
 use crate::schema::Score;
-use druid::text::format::ParseFormatter;
+use druid::text::ParseFormatter;
 use druid::widget::Flex;
 use druid::widget::Label;
 use druid::widget::Scroll;
