@@ -2,6 +2,7 @@ use super::bpm_detector::BpmDetectorData;
 use crate::schema::BeatLength;
 use crate::schema::BeatPosition;
 use crate::schema::Score;
+use druid::text::Selection;
 use druid::Data;
 use druid::Lens;
 
@@ -16,6 +17,8 @@ pub struct ScoreEditorData {
     pub music_volume: f64,
     pub metronome_volume: f64,
     pub bpm_detector_data: BpmDetectorData,
+    #[data(same_fn = "PartialEq::eq")]
+    pub selection: Option<Selection>,
 
     pub music_playback_position: Option<MusicPlaybackPositionData>,
 }
@@ -38,6 +41,7 @@ impl Default for ScoreEditorData {
             music_volume: 0.4,
             metronome_volume: 0.4,
             bpm_detector_data: BpmDetectorData::default(),
+            selection: None,
 
             music_playback_position: None,
         }

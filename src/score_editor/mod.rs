@@ -4,6 +4,7 @@ mod commands;
 mod data;
 mod formatting;
 mod layouts;
+mod lyrics_editor;
 mod measure_dialog;
 mod misc;
 mod score_editor_widget;
@@ -21,10 +22,12 @@ use druid::widget::TextBox;
 use druid::Insets;
 use druid::Widget;
 use druid::WidgetExt;
+use druid::WidgetId;
 use num::BigRational;
 
 use self::formatting::beat_label_string;
 use self::formatting::format_time;
+use self::lyrics_editor::lyrics_editor;
 use self::score_editor_widget::ScoreEditor;
 
 pub use self::data::ScoreEditorData;
@@ -78,14 +81,18 @@ pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEd
         hover_cursor: None,
     };
 
-    let score_editor = Flex::column().with_child(status_bar).with_flex_child(
-        Scroll::new(score_editor.padding(Insets::uniform(8.0)))
-            .vertical()
-            .expand_height(),
-        1.0,
-    );
+    let widget_id = WidgetId::next();
+    let score_editor = Flex::column()
+        .with_child(status_bar)
+        .with_flex_child(
+            Scroll::new(score_editor.padding(Insets::uniform(8.0)))
+                .vertical()
+                .expand_height(),
+            1.0,
+        )
+        .with_id(widget_id);
 
-    let lyrics_editor = TextBox::multiline()
+    let lyrics_editor = lyrics_editor(widget_id)
         .lens(Score::lyrics)
         .lens(ScoreEditorData::score);
 

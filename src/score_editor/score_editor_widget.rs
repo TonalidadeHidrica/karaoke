@@ -51,6 +51,7 @@ use super::commands::EDIT_MEAUSRE_LENGTH_SELECTOR;
 use super::data::MusicPlaybackPositionData;
 use super::data::ScoreEditorData;
 use super::layouts::*;
+use super::lyrics_editor::UPDATE_SELECTION_SELECTOR;
 use super::measure_dialog::build_measure_dialog;
 use super::misc::append_element;
 use super::misc::cursor_delta_candidates;
@@ -239,6 +240,8 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                         Some(bpm) => data.score.bpms.insert(command.position, bpm),
                         None => data.score.bpms.remove(&command.position),
                     };
+                } else if let Some(selection) = command.get(UPDATE_SELECTION_SELECTOR) {
+                    data.selection = selection.to_owned();
                 }
             }
             Event::AnimFrame(..) => {

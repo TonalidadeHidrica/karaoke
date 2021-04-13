@@ -1,7 +1,6 @@
 use crate::schema::BeatPosition;
 use crate::schema::Bpm;
 use crate::schema::MeasureLength;
-use druid::Selector;
 use druid::SingleUse;
 
 #[derive(Debug)]
