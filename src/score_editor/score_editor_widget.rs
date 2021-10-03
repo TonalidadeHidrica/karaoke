@@ -7,6 +7,7 @@ use std::sync::mpsc;
 use crate::audio::AudioCommand;
 use crate::audio::AudioManager;
 use crate::audio::SoundEffectSchedule;
+use crate::config::Config;
 use crate::schema::iterate_beat_times;
 use crate::schema::BeatLength;
 use crate::schema::BeatPosition;

@@ -6,8 +6,10 @@ use std::ops::AddAssign;
 use std::ops::Mul;
 use std::ops::Sub;
 use std::ops::SubAssign;
+use std::path::PathBuf;
 
 use derive_more::From;
+use derive_new::new;
 use druid::im::OrdMap;
 use druid::im::Vector;
 use druid::Data;
@@ -210,13 +212,20 @@ impl Mul<BeatLength> for Bpm {
     }
 }
 
-#[derive(Clone, Default, Debug, Data, Lens)]
+#[derive(Clone, Debug, new, Data, Lens)]
 pub struct Score {
+    #[new(default)]
     pub tracks: Vector<Track>,
+    #[new(default)]
     pub measure_lengths: OrdMap<BeatPosition, MeasureLength>,
+    #[new(default)]
     pub bpms: OrdMap<BeatPosition, Bpm>,
+    #[new(default)]
     pub offset: f64,
+    #[new(default)]
     pub lyrics: String,
+    #[data(eq)]
+    pub font_file: PathBuf,
 }
 
 impl Score {

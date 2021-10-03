@@ -48,7 +48,9 @@ impl Widget<ScoreEditorData> for LyricsMappingEditor {
         }
     }
 
-    fn paint(&mut self, _ctx: &mut druid::PaintCtx, _data: &ScoreEditorData, _env: &druid::Env) {}
+    fn paint(&mut self, _ctx: &mut druid::PaintCtx, data: &ScoreEditorData, _env: &druid::Env) {
+        dbg!(&data.score.font_file);
+    }
 }
 
 pub fn build_lyrics_mapping_dialog() -> impl Widget<ScoreEditorData> {

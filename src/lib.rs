@@ -2,6 +2,7 @@
 pub mod druid_supplemental;
 
 pub mod audio;
+pub mod config;
 pub mod dasp_signal_ext;
 pub mod error;
 pub mod linest;
