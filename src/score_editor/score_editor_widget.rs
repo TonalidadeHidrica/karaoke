@@ -20,7 +20,7 @@ use druid::piet::IntoBrush;
 use druid::piet::Piet;
 use druid::piet::Text;
 use druid::piet::TextLayoutBuilder;
-use druid::theme::LABEL_COLOR;
+use druid::theme::TEXT_COLOR;
 use druid::Color;
 use druid::Data;
 use druid::Env;
@@ -286,6 +286,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             ctx.request_layout();
             ctx.request_paint();
         }
+        #[allow(clippy::float_cmp)]
         if old_data.music_volume != data.music_volume
             || old_data.metronome_volume != data.metronome_volume
         {
@@ -313,7 +314,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             .max()
             .as_ref()
             .max(data.music_playback_position.as_ref().map(|p| &p.beat))
-            .unwrap_or_else(|| &data.cursor_position)
+            .unwrap_or(&data.cursor_position)
             .max(&data.cursor_position)
             + &BeatLength::one();
 
@@ -406,7 +407,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
 
             // Draw bar lines at the first of each measure
             for beat in row.bar_lines.iter() {
-                let x = get_x(&beat);
+                let x = get_x(beat);
                 let line = Line::new((x, row.y), (x, row.y + LINE_HEIGHT));
                 ctx.stroke(line, &Color::GRAY, 2.0);
             }
@@ -415,7 +416,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             for (start, end) in row.bar_lines.iter().tuple_windows() {
                 for beat in iterate(start.clone(), |x| x + &BeatLength::one())
                     .skip(1)
-                    .take_while(|b| b < &end)
+                    .take_while(|b| b < end)
                 {
                     let x = get_x(&beat);
                     let line = Line::new((x, row.y + 2.0), (x, row.y + LINE_HEIGHT));
@@ -429,13 +430,13 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             }
             // Draw music playback cursor
             if let Some(beat) = data.music_playback_position.as_ref().map(|p| &p.beat) {
-                if row.contains_beat(&beat) {
+                if row.contains_beat(beat) {
                     draw_cursor(ctx, get_x, beat, row.y, &Color::NAVY, 3.0);
                 }
             }
             // Draw hover cursor
             if let Some(beat) = &self.hover_cursor {
-                if row.contains_beat(&beat) {
+                if row.contains_beat(beat) {
                     draw_cursor(ctx, get_x, beat, row.y, &Color::AQUA, 1.0);
                 }
             }
@@ -460,7 +461,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 let layout = ctx
                     .text()
                     .new_text_layout(format!("{}", measure))
-                    .text_color(env.get(LABEL_COLOR))
+                    .text_color(env.get(TEXT_COLOR))
                     .build();
                 match layout {
                     Ok(layout) => ctx.draw_text(&layout, (get_x(beat), row.y)),
@@ -474,7 +475,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 let layout = ctx
                     .text()
                     .new_text_layout(format!("{:.2}", bpm.0))
-                    .text_color(env.get(LABEL_COLOR))
+                    .text_color(env.get(TEXT_COLOR))
                     .build();
                 match layout {
                     Ok(layout) => ctx.draw_text(&layout, (get_x(beat), row.y)),
@@ -507,7 +508,7 @@ impl ScoreEditor {
         let widget_id = ctx.widget_id();
         let window_desc = WindowDesc::new(build_measure_dialog::<ScoreEditorData>(
             widget_id,
-            cursor_position.to_owned(),
+            cursor_position,
             current_measure_length,
             already_exsits,
         ));
@@ -524,7 +525,7 @@ impl ScoreEditor {
         let widget_id = ctx.widget_id();
         let window_desc = WindowDesc::new(build_bpm_dialog::<ScoreEditorData>(
             widget_id,
-            cursor_position.to_owned(),
+            cursor_position,
             current_bpm,
             already_exsits,
         ));
@@ -577,7 +578,7 @@ impl ScoreEditor {
         let row = self
             .layout_cache
             .iter()
-            .find(|row| row.y_range().contains(&&event.pos.y))?;
+            .find(|row| row.y_range().contains(&event.pos.y))?;
         let length = BeatLength(BigRational::from_float((event.pos.x / BEAT_WIDTH).trunc())?);
         let beat = &row.beat_start + &length;
         row.contains_beat(&beat).then(|| beat)
@@ -614,7 +615,7 @@ fn draw_track(
             } else {
                 get_x(track.start_beat())
             };
-            let max_x = if &row.beat_end < &track_end_beat {
+            let max_x = if row.beat_end < track_end_beat {
                 rect.max_x() + 20.0
             } else {
                 get_x(&track_end_beat)
@@ -631,7 +632,7 @@ fn draw_track(
         let rect = rect.inset(Insets::uniform_xy(0.0, -6.0));
 
         for (note_start_beat, note_end_beat, _) in track.iterate_notes() {
-            if &note_end_beat < &row.beat_start || &row.beat_end < &note_start_beat {
+            if note_end_beat < row.beat_start || row.beat_end < note_start_beat {
                 continue;
             }
             let rect = Rect::new(

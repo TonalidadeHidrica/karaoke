@@ -1,5 +1,3 @@
-use std::mem::replace;
-
 use crate::schema::iterate_measures;
 use crate::schema::BeatLength;
 use crate::schema::BeatPosition;
@@ -54,12 +52,12 @@ pub fn split_into_rows(
             // In this branch, request_newline is always true, so the previous lines has been
             // already flushed.
             for (chunk_start, chunk_end) in
-                iterate(measure_start_beat, |beat| beat + &max_beat_length_in_row)
+                iterate(measure_start_beat, |beat| beat + max_beat_length_in_row)
                     .tuple_windows()
                     .take_while(|(start, _)| start <= &measure_end_beat)
             {
                 let chunk_end = (&chunk_end).min(&measure_end_beat);
-                let mut chunk_bar_lines = replace(&mut bar_lines, Vec::new());
+                let mut chunk_bar_lines = std::mem::take(&mut bar_lines);
                 if chunk_end == &measure_end_beat {
                     chunk_bar_lines.push(measure_end_beat.clone());
                 }

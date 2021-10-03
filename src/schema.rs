@@ -508,6 +508,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_beat_to_time_01() {
         let offset = 2.5;
         let bpms = ordmap![
