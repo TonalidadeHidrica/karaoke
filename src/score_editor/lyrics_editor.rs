@@ -1,5 +1,7 @@
 use druid::text::Selection;
+use druid::widget::Button;
 use druid::widget::Controller;
+use druid::widget::Flex;
 use druid::widget::TextBox;
 use druid::Command;
 use druid::Env;
@@ -12,6 +14,9 @@ use druid::WidgetExt;
 use druid::WidgetId;
 
 selector! { pub UPDATE_SELECTION_SELECTOR: Option<Selection> }
+selector! { pub SET_LYRICS_RANGE }
+#[allow(unused)]
+selector! { pub NOTIFY_CURRENT_LYRICS_RANGE: Option<Selection> }
 
 struct LyricsController {
     target_widget: WidgetId,
@@ -58,5 +63,18 @@ impl Controller<String, TextBox<String>> for LyricsController {
 }
 
 pub fn lyrics_editor(target_widget: WidgetId) -> impl Widget<String> {
-    TextBox::multiline().controller(LyricsController { target_widget })
+    let upper_bar = Flex::row()
+        .with_child(Button::new("< Set").on_click(move |ctx, _, _| {
+            ctx.submit_command(SET_LYRICS_RANGE.to(target_widget));
+        }))
+        .with_child(Button::new("> Get").on_click(|_, _, _| println!("Get")));
+    Flex::column()
+        .must_fill_main_axis(true)
+        .with_child(upper_bar)
+        .with_flex_child(
+            TextBox::multiline()
+                .controller(LyricsController { target_widget })
+                .expand(),
+            1.0,
+        )
 }

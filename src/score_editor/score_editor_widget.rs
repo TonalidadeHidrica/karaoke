@@ -51,6 +51,7 @@ use super::commands::EDIT_MEAUSRE_LENGTH_SELECTOR;
 use super::data::MusicPlaybackPositionData;
 use super::data::ScoreEditorData;
 use super::layouts::*;
+use super::lyrics_editor::SET_LYRICS_RANGE;
 use super::lyrics_editor::UPDATE_SELECTION_SELECTOR;
 use super::measure_dialog::build_measure_dialog;
 use super::misc::append_element;
@@ -133,6 +134,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                         data.score.tracks.push_back(Track {
                             start_beat: data.cursor_position.to_owned(),
                             elements: Default::default(),
+                            lyrics: None,
                         });
                         data.selected_track = Some(data.score.tracks.len() - 1);
                     }
@@ -168,6 +170,12 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     "/" => {
                         if let Some(time) = self.audio_manager.playback_position() {
                             data.bpm_detector_data.push(time);
+                        }
+                    }
+                    "L" => {
+                        // Remove lyrics
+                        if let Some(i) = data.selected_track {
+                            data.score.tracks[i].lyrics = None;
                         }
                     }
                     _ => {}
@@ -242,6 +250,15 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     };
                 } else if let Some(selection) = command.get(UPDATE_SELECTION_SELECTOR) {
                     data.selection = selection.to_owned();
+                } else if let Some(()) = command.get(SET_LYRICS_RANGE) {
+                    if let (Some(track), Some(selection)) = (data.selected_track, data.selection) {
+                        let (s, t) = (selection.anchor, selection.active);
+                        let (s, t) = (s.min(t), s.max(t));
+                        if s < t {
+                            data.score.tracks[track].lyrics =
+                                Some(data.score.lyrics[s..t].to_owned());
+                        }
+                    }
                 }
             }
             Event::AnimFrame(..) => {
@@ -596,31 +613,43 @@ fn draw_track(
     draw_rect: &Rect,
 ) {
     let track_end_beat = track.end_beat();
+    let is_first = &row.beat_start <= track.start_beat();
+    let is_final = track_end_beat <= row.beat_end;
+
+    let lyrics_height = if is_first && track.lyrics.is_some() {
+        LYRICS_HEIGHT
+    } else {
+        0.
+    };
+    dbg!(lyrics_height);
+
     ctx.with_save(|ctx| {
         let rect = Rect::new(
             draw_rect.min_x(),
             track_view.y,
             get_x(&row.beat_end),
-            track_view.y + NOTE_FULL_HEIGHT,
+            track_view.y + NOTE_FULL_HEIGHT + lyrics_height,
         );
         ctx.clip(rect);
-        let rect = rect.inset(Insets::uniform_xy(
+        let track_rect = rect.inset(Insets::uniform_xy(
             0.0,
             (NOTE_HEIGHT - NOTE_FULL_HEIGHT) / 2.0,
         ));
 
+        let min_x = if is_first {
+            get_x(track.start_beat())
+        } else {
+            track_rect.min_x() - 20.0
+        };
+        let max_x = if is_final {
+            get_x(&track_end_beat)
+        } else {
+            track_rect.max_x() + 20.0
+        };
+
         {
-            let min_x = if track.start_beat() < &row.beat_start {
-                rect.min_x() - 20.0
-            } else {
-                get_x(track.start_beat())
-            };
-            let max_x = if row.beat_end < track_end_beat {
-                rect.max_x() + 20.0
-            } else {
-                get_x(&track_end_beat)
-            };
-            let rect = Rect::new(min_x, rect.min_y(), max_x, rect.max_y()).to_rounded_rect(4.0);
+            let rect = Rect::new(min_x, track_rect.min_y(), max_x, track_rect.max_y())
+                .to_rounded_rect(4.0);
             let (fill_brush, stroke_brush) = match selected {
                 false => (Color::rgb8(0, 66, 19), Color::rgb8(0, 46, 13)),
                 true => (Color::rgb8(66, 0, 69), Color::rgb8(32, 0, 46)),
@@ -629,7 +658,8 @@ fn draw_track(
             ctx.stroke(rect, &stroke_brush, 3.0);
         }
 
-        let rect = rect.inset(Insets::uniform_xy(0.0, -6.0));
+        let note_rect = track_rect.inset(Insets::uniform_xy(0.0, -6.0));
+        let note_rect = note_rect.with_size((note_rect.width(), NOTE_HEIGHT - 6.0 * 2.)); // TODO magic number
 
         for (note_start_beat, note_end_beat, _) in track.iterate_notes() {
             if note_end_beat < row.beat_start || row.beat_end < note_start_beat {
@@ -637,12 +667,24 @@ fn draw_track(
             }
             let rect = Rect::new(
                 get_x(&note_start_beat),
-                rect.min_y(),
+                note_rect.min_y(),
                 get_x(&note_end_beat),
-                rect.max_y(),
+                note_rect.max_y(),
             )
             .to_rounded_rect(5.0);
             ctx.fill(rect, &Color::rgb8(172, 255, 84));
+        }
+
+        if let Some(lyrics) = &track.lyrics {
+            let layout = ctx
+                .text()
+                .new_text_layout(lyrics.to_owned())
+                .text_color(Color::Rgba32(0xffffffff))
+                .build();
+            match layout {
+                Ok(layout) => ctx.draw_text(&layout, (min_x, note_rect.max_y())),
+                Err(e) => eprintln!("{}", e),
+            };
         }
     });
 }

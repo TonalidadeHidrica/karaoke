@@ -282,6 +282,7 @@ pub fn time_to_beat(offset: f64, bpms: &OrdMap<BeatPosition, Bpm>, time: f64) ->
 pub struct Track {
     pub start_beat: BeatPosition,
     pub elements: Vector<ScoreElement>,
+    pub lyrics: Option<String>,
 }
 
 impl Track {
