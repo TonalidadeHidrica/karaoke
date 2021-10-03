@@ -17,7 +17,7 @@ pub struct ScoreEditorData {
     pub music_volume: f64,
     pub metronome_volume: f64,
     pub bpm_detector_data: BpmDetectorData,
-    #[data(same_fn = "PartialEq::eq")]
+    #[data(eq)]
     pub selection: Option<Selection>,
 
     pub music_playback_position: Option<MusicPlaybackPositionData>,
