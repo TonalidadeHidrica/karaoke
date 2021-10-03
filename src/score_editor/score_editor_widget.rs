@@ -53,6 +53,7 @@ use super::data::ScoreEditorData;
 use super::layouts::*;
 use super::lyrics_editor::SET_LYRICS_RANGE;
 use super::lyrics_editor::UPDATE_SELECTION_SELECTOR;
+use super::lyrics_mapping_dialog::build_lyrics_mapping_dialog;
 use super::measure_dialog::build_measure_dialog;
 use super::misc::append_element;
 use super::misc::cursor_delta_candidates;
@@ -172,6 +173,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                             data.bpm_detector_data.push(time);
                         }
                     }
+                    "l" => self.edit_lyrics_mapping(ctx, data),
                     "L" => {
                         // Remove lyrics
                         if let Some(i) = data.selected_track {
@@ -546,6 +548,15 @@ impl ScoreEditor {
             current_bpm,
             already_exsits,
         ));
+        ctx.new_window(window_desc);
+    }
+
+    fn edit_lyrics_mapping(&self, ctx: &mut EventCtx, data: &ScoreEditorData) {
+        let i = match data.selected_track {
+            Some(i) => i,
+            _ => return,
+        };
+        let window_desc = WindowDesc::new(build_lyrics_mapping_dialog());
         ctx.new_window(window_desc);
     }
 

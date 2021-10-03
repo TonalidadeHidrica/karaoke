@@ -8,6 +8,7 @@ mod lyrics_editor;
 mod measure_dialog;
 mod misc;
 mod score_editor_widget;
+mod lyrics_mapping_dialog;
 
 use crate::audio::AudioManager;
 use crate::schema::BeatLength;
