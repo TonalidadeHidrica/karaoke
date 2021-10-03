@@ -15,8 +15,7 @@ use druid::WidgetId;
 
 selector! { pub UPDATE_SELECTION_SELECTOR: Option<Selection> }
 selector! { pub SET_LYRICS_RANGE }
-#[allow(unused)]
-selector! { pub NOTIFY_CURRENT_LYRICS_RANGE: Option<Selection> }
+selector! { #[allow(unused)] pub NOTIFY_CURRENT_LYRICS_RANGE: Option<Selection> }
 
 struct LyricsController {
     target_widget: WidgetId,
