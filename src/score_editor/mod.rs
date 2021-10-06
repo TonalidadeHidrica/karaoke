@@ -5,12 +5,16 @@ mod data;
 mod formatting;
 mod layouts;
 mod lyrics_editor;
+mod lyrics_mapping_dialog;
 mod measure_dialog;
 mod misc;
 mod score_editor_widget;
-mod lyrics_mapping_dialog;
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::audio::AudioManager;
+use crate::fonts::FontLoader;
 use crate::schema::BeatLength;
 use crate::schema::Score;
 use druid::text::ParseFormatter;
@@ -33,7 +37,10 @@ use self::score_editor_widget::ScoreEditor;
 
 pub use self::data::ScoreEditorData;
 
-pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEditorData> {
+pub fn build_toplevel_widget(
+    audio_manager: AudioManager,
+    font_loader: FontLoader,
+) -> impl Widget<ScoreEditorData> {
     let status_bar = Flex::row()
         .with_child(
             Label::dynamic(|data: &ScoreEditorData, _| beat_label_string(data)).fix_width(50.0),
@@ -78,6 +85,7 @@ pub fn build_toplevel_widget(audio_manager: AudioManager) -> impl Widget<ScoreEd
 
     let score_editor = ScoreEditor {
         audio_manager,
+        font_loader: Rc::new(RefCell::new(font_loader)),
         layout_cache: Vec::new(),
         hover_cursor: None,
     };

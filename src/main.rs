@@ -4,6 +4,7 @@ use karaoke::audio::AudioCommand;
 use karaoke::audio::AudioManager;
 use karaoke::config::Config;
 use karaoke::error::EditorError;
+use karaoke::fonts::FontLoader;
 use karaoke::schema::Score;
 use karaoke::score_editor::build_toplevel_widget;
 use karaoke::score_editor::ScoreEditorData;
@@ -18,9 +19,10 @@ fn main() -> Result<(), EditorError> {
             .send(AudioCommand::LoadMusic(path.into()))
             .unwrap();
     };
+    let font_loader = FontLoader::default();
     let data = ScoreEditorData::new(Score::new(config.font_path));
-    let window =
-        WindowDesc::new(build_toplevel_widget(audio_manager)).window_size((1440.0, 810.0));
+    let window = WindowDesc::new(build_toplevel_widget(audio_manager, font_loader))
+        .window_size((1440.0, 810.0));
     AppLauncher::with_window(window)
         .log_to_console()
         .launch(data)?;

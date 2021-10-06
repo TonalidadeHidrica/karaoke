@@ -1,13 +1,15 @@
+use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::collections::binary_heap::PeekMut;
 use std::collections::BinaryHeap;
 use std::ops::Range;
+use std::rc::Rc;
 use std::sync::mpsc;
 
 use crate::audio::AudioCommand;
 use crate::audio::AudioManager;
 use crate::audio::SoundEffectSchedule;
-use crate::config::Config;
+use crate::fonts::FontLoader;
 use crate::schema::iterate_beat_times;
 use crate::schema::BeatLength;
 use crate::schema::BeatPosition;
@@ -62,6 +64,7 @@ use super::misc::split_into_rows;
 
 pub struct ScoreEditor {
     pub(super) audio_manager: AudioManager,
+    pub font_loader: Rc<RefCell<FontLoader>>,
     pub(super) layout_cache: Vec<ScoreRow>,
     pub(super) hover_cursor: Option<BeatPosition>,
 }
@@ -557,7 +560,7 @@ impl ScoreEditor {
             Some(i) => i,
             _ => return,
         };
-        let window_desc = WindowDesc::new(build_lyrics_mapping_dialog());
+        let window_desc = WindowDesc::new(build_lyrics_mapping_dialog(self.font_loader.clone()));
         ctx.new_window(window_desc);
     }
 

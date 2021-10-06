@@ -1,9 +1,15 @@
+use std::{borrow::BorrowMut, cell::RefCell, rc::Rc};
+
 use druid::{Size, Widget};
+
+use crate::fonts::{FontLoader, ForceLoad};
 
 use super::ScoreEditorData;
 
 #[derive(Default)]
-struct LyricsMappingEditor {}
+struct LyricsMappingEditor {
+    font_loader: Rc<RefCell<FontLoader>>,
+}
 
 impl Widget<ScoreEditorData> for LyricsMappingEditor {
     fn event(
@@ -49,10 +55,13 @@ impl Widget<ScoreEditorData> for LyricsMappingEditor {
     }
 
     fn paint(&mut self, _ctx: &mut druid::PaintCtx, data: &ScoreEditorData, _env: &druid::Env) {
-        dbg!(&data.score.font_file);
+        let mut a = (&*self.font_loader).borrow_mut();
+        let font = a.get(&data.score.font_file, ForceLoad::False);
     }
 }
 
-pub fn build_lyrics_mapping_dialog() -> impl Widget<ScoreEditorData> {
-    LyricsMappingEditor::default()
+pub fn build_lyrics_mapping_dialog(
+    font_loader: Rc<RefCell<FontLoader>>,
+) -> impl Widget<ScoreEditorData> {
+    LyricsMappingEditor { font_loader }
 }
