@@ -56,7 +56,7 @@ impl Widget<ScoreEditorData> for LyricsMappingEditor {
 
     fn paint(&mut self, _ctx: &mut druid::PaintCtx, data: &ScoreEditorData, _env: &druid::Env) {
         let mut a = (&*self.font_loader).borrow_mut();
-        let font = a.get(&data.score.font_file, ForceLoad::False);
+        let font = a.get(data.score.font_file.clone(), ForceLoad::False).unwrap();
     }
 }
 
