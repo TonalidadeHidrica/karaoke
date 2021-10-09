@@ -43,7 +43,7 @@ pub struct MusicPlaybackPositionData {
 //     fn default() -> Self {
 //         ScoreEditorData {
 //             score: Score::default(),
-// 
+//
 //             cursor_position: BeatPosition::zero(),
 //             cursor_delta: BeatLength::one(),
 //             selected_track: None,
@@ -52,7 +52,7 @@ pub struct MusicPlaybackPositionData {
 //             metronome_volume: 0.4,
 //             bpm_detector_data: BpmDetectorData::default(),
 //             selection: None,
-// 
+//
 //             music_playback_position: None,
 //         }
 //     }

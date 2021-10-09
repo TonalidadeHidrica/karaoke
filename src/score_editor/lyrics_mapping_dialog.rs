@@ -1,12 +1,12 @@
 use std::{cell::RefCell, rc::Rc};
 
-use druid::{RenderContext, Size, Widget, piet::{Image, ImageFormat, InterpolationMode}};
-use freetype::{face::LoadFlag, Bitmap, Library, RenderMode};
-use rustybuzz::UnicodeBuffer;
-
-use crate::fonts::{render_text, FontLoader, ForceLoad};
+use druid::{
+    piet::{Image, InterpolationMode},
+    RenderContext, Size, Widget,
+};
 
 use super::ScoreEditorData;
+use crate::fonts::{render_text, FontLoader};
 
 #[derive(Default)]
 struct LyricsMappingEditor {
