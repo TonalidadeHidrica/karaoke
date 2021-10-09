@@ -60,6 +60,7 @@ pub struct RenderedText {
     pub glyphs: Vec<RenderedGlyph>,
     pub image: CoreGraphicsImage,
 }
+#[derive(Debug)]
 pub struct RenderedGlyph {
     pub cursor_pos: (usize, usize),
     pub top_left: (usize, usize),
@@ -72,6 +73,7 @@ pub fn render_text(
     mut font_loader: impl DerefMut<Target = FontLoader>,
     font_path: PathBuf,
     paint_ctx: &mut PaintCtx,
+    text: &str,
 ) -> RenderedText {
     // TODO remove unwraps!
 
@@ -81,7 +83,7 @@ pub fn render_text(
 
     let mut buffer = UnicodeBuffer::new();
     // buffer.set_direction(rustybuzz::Direction::RightToLeft);
-    buffer.push_str("Я говорю\u{0301} по-ру\u{0301}сски немно\u{0301}го.");
+    buffer.push_str(text);
     let shape = rustybuzz::shape(&hb_face, &[], buffer);
 
     let ft_lib = Library::init().unwrap();
@@ -125,8 +127,12 @@ pub fn render_text(
         })
         .unzip::<_, _, Vec<_>, Vec<_>>();
 
-    let xs = zip(&xys, &infos).flat_map(|((_, xy), (wh, ..))| [xy.0, xy.0 + wh.0]);
-    let ys = zip(&xys, &infos).flat_map(|((_, xy), (wh, ..))| [xy.1, xy.1 + wh.1]);
+    let xs = zip(&xys, &infos)
+        .flat_map(|((dxy, xy), (wh, ..))| [xy.0, xy.0 + wh.0, dxy.0])
+        .chain([0, x]);
+    let ys = zip(&xys, &infos)
+        .flat_map(|((dxy, xy), (wh, ..))| [xy.1, xy.1 + wh.1, dxy.1])
+        .chain([0, y]);
     // println!("{:?} {:?}", xs.clone().collect_vec(), ys.clone().collect_vec());
     let (xs, ys, w, h) = match (xs.minmax().into_option(), ys.minmax().into_option()) {
         (Some((xs, xt)), Some((ys, yt))) => (xs, ys, (xt - xs) as usize, (yt - ys) as usize),

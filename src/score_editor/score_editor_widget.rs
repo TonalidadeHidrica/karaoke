@@ -636,7 +636,6 @@ fn draw_track(
     } else {
         0.
     };
-    dbg!(lyrics_height);
 
     ctx.with_save(|ctx| {
         let rect = Rect::new(

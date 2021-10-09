@@ -73,47 +73,58 @@ impl Widget<ScoreEditorData> for LyricsMappingEditor {
     }
 
     fn paint(&mut self, ctx: &mut druid::PaintCtx, data: &ScoreEditorData, _env: &druid::Env) {
-        // TODO cache the rendered text
-        let Self {
-            text_cache,
-            font_loader,
-            ..
-        } = self;
-        let text = &text_cache
-            .get_or_insert_with(|| {
-                (
-                    String::new(),
-                    render_text(
-                        (&*font_loader).borrow_mut(),
-                        data.score.font_file.clone(),
-                        ctx,
-                    ),
-                )
-            })
-            .1;
+        if let Some(track_id) = data.selected_track {
+            let track = &data.score.tracks[track_id];
+            if let Some(lyrics) = &track.lyrics {
+                let Self {
+                    text_cache,
+                    font_loader,
+                    ..
+                } = self;
+                let text = match text_cache {
+                    Some((text, cache)) if text == lyrics => cache,
+                    _ => {
+                        &self
+                            .text_cache
+                            .insert((
+                                lyrics.to_owned(),
+                                render_text(
+                                    (&*font_loader).borrow_mut(),
+                                    data.score.font_file.clone(),
+                                    ctx,
+                                    lyrics,
+                                ),
+                            ))
+                            .1
+                    }
+                };
+                // println!("{:?}", text.glyphs);
 
-        let top_y = 30.0;
-        let image_size = text.image.size();
-        let ctx_size = ctx.size();
-        let text_rect = image_size
-            .to_rect()
-            .with_origin(((ctx_size.width - image_size.width) / 2., top_y));
-        ctx.draw_image(&text.image, text_rect, InterpolationMode::Bilinear);
+                let top_y = 30.0;
+                let image_size = text.image.size();
+                let ctx_size = ctx.size();
+                let text_rect = image_size
+                    .to_rect()
+                    .with_origin(((ctx_size.width - image_size.width) / 2., top_y));
+                ctx.draw_image(&text.image, text_rect, InterpolationMode::Bilinear);
 
-        let get_x = |pos: usize| {
-            text_rect.x0
-                + text
-                    .glyphs
-                    .get(pos)
-                    .map_or(image_size.width, |g| g.cursor_pos.0 as f64)
-        };
-        let x = get_x(self.cursor_pos);
-        let line = Line::new((x, text_rect.y0), (x, text_rect.y1));
-        ctx.stroke(line, &Color::GREEN, 1.);
+                let get_x = |pos: usize| {
+                    text_rect.x0
+                        + text
+                            .glyphs
+                            .get(pos)
+                            .map_or(image_size.width, |g| g.cursor_pos.0 as f64)
+                };
+                let x = get_x(self.cursor_pos);
+                let line = Line::new((x, text_rect.y0), (x, text_rect.y1));
+                ctx.stroke(line, &Color::GREEN, 1.);
+                println!("{}", x);
 
-        let x2 = get_x(self.select_pos);
-        let rect = Rect::new(x, text_rect.y0, x2, text_rect.y1);
-        ctx.fill(rect, &Color::GREEN.with_alpha(0.3));
+                let x2 = get_x(self.select_pos);
+                let rect = Rect::new(x, text_rect.y0, x2, text_rect.y1);
+                ctx.fill(rect, &Color::GREEN.with_alpha(0.3));
+            }
+        }
     }
 }
 
