@@ -138,12 +138,18 @@ use IncrementOrDecrement::*;
 impl LyricsMappingEditor {
     fn move_cursor(&mut self, ctx: &mut EventCtx, dir: IncrementOrDecrement, mods: &Modifiers) {
         if let Some((_, text)) = &self.text_cache {
-            match dir {
-                Increment => self.cursor_pos += 1,
-                Decrement => self.cursor_pos = self.cursor_pos.saturating_sub(1),
-            }
-            self.cursor_pos = self.cursor_pos.min(text.glyphs.len());
-
+            let len = text.glyphs.len();
+            let is_boundary = |&x: &usize| {
+                x > 0
+                    && match (text.glyphs.get(x - 1), text.glyphs.get(x)) {
+                        (Some(a), Some(b)) => a.glyph_info.cluster != b.glyph_info.cluster,
+                        _ => false,
+                    }
+            };
+            self.cursor_pos = match dir {
+                Increment => (self.cursor_pos+1..len).find(is_boundary).unwrap_or(len),
+                Decrement => (0..self.cursor_pos).rev().find(is_boundary).unwrap_or(0),
+            };
             if !mods.contains(Modifiers::SHIFT) {
                 self.select_pos = self.cursor_pos;
             }
