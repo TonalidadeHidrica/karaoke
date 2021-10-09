@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use derive_more::From;
 use derive_new::new;
 use druid::im::OrdMap;
+use druid::im::OrdSet;
 use druid::im::Vector;
 use druid::Data;
 use druid::Lens;
@@ -291,8 +292,21 @@ pub fn time_to_beat(offset: f64, bpms: &OrdMap<BeatPosition, Bpm>, time: f64) ->
 pub struct Track {
     pub start_beat: BeatPosition,
     pub elements: Vector<ScoreElement>,
-    pub lyrics: Option<String>,
+    pub lyrics: Option<Lyrics>,
 }
+
+#[derive(Clone, Debug, Data)]
+pub struct Lyrics {
+    pub text: String,
+    pub mappings: OrdMap<(usize, usize), usize>,
+}
+
+// #[derive(Clone, Debug, Data, PartialEq, Eq, PartialOrd, Ord)]
+// pub struct LyricsMapping {
+//     pub start: usize,
+//     pub end: usize,
+//     pub divions: usize,
+// }
 
 impl Track {
     pub fn start_beat(&self) -> &BeatPosition {

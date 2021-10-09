@@ -10,6 +10,7 @@ use crate::audio::AudioCommand;
 use crate::audio::AudioManager;
 use crate::audio::SoundEffectSchedule;
 use crate::fonts::FontLoader;
+use crate::schema::Lyrics;
 use crate::schema::iterate_beat_times;
 use crate::schema::BeatLength;
 use crate::schema::BeatPosition;
@@ -17,6 +18,8 @@ use crate::schema::Bpm;
 use crate::schema::MeasureLength;
 use crate::schema::ScoreElementKind;
 use crate::schema::Track;
+use druid::im::OrdMap;
+use druid::im::Vector;
 use druid::keyboard_types::Key;
 use druid::kurbo::Line;
 use druid::piet::IntoBrush;
@@ -261,8 +264,10 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                         let (s, t) = (selection.anchor, selection.active);
                         let (s, t) = (s.min(t), s.max(t));
                         if s < t {
-                            data.score.tracks[track].lyrics =
-                                Some(data.score.lyrics[s..t].to_owned());
+                            data.score.tracks[track].lyrics = Some(Lyrics {
+                                text: data.score.lyrics[s..t].to_owned(),
+                                mappings: OrdMap::new(),
+                            });
                         }
                     }
                 }
@@ -692,7 +697,7 @@ fn draw_track(
         if let Some(lyrics) = &track.lyrics {
             let layout = ctx
                 .text()
-                .new_text_layout(lyrics.to_owned())
+                .new_text_layout(lyrics.text.to_owned())
                 .text_color(Color::Rgba32(0xffffffff))
                 .build();
             match layout {

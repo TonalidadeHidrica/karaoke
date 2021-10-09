@@ -1,4 +1,5 @@
 use druid::Data;
+use std::ops::Range;
 
 #[derive(Clone, Copy, Default, Debug, Data)]
 pub struct Linest {
@@ -38,4 +39,12 @@ impl Linest {
             LinestResult { a, b, r2 }
         })
     }
+}
+
+pub fn map_f64(x: f64, from: Range<f64>, to: Range<f64>) -> f64 {
+    let from_size = from.end - from.start;
+    let from_advance = x - from.start;
+    assert!(from_size != 0.0 || from_advance == 0.0);
+    let to_size = to.end - to.start;
+    from_advance / from_size * to_size + to.start
 }

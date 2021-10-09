@@ -69,6 +69,17 @@ pub struct RenderedGlyph {
     pub glyph_info: GlyphInfo,
 }
 
+impl RenderedText {
+    pub fn is_boundary(&self, x: usize) -> bool {
+        x == 0
+            || x == self.glyphs.len()
+            || match (self.glyphs.get(x - 1), self.glyphs.get(x)) {
+                (Some(a), Some(b)) => a.glyph_info.cluster != b.glyph_info.cluster,
+                _ => false,
+            }
+    }
+}
+
 pub fn render_text(
     mut font_loader: impl DerefMut<Target = FontLoader>,
     font_path: PathBuf,
