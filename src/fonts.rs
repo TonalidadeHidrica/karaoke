@@ -11,7 +11,7 @@ use druid::PaintCtx;
 use druid::{piet::ImageFormat, RenderContext};
 use freetype::{face::LoadFlag, Bitmap, Library, RenderMode};
 use itertools::{zip, Itertools};
-use rustybuzz::UnicodeBuffer;
+use rustybuzz::{GlyphInfo, GlyphPosition, UnicodeBuffer};
 use thiserror::Error;
 
 #[derive(Default)]
@@ -56,11 +56,23 @@ pub enum FontLoadError {
     IOError(#[from] std::io::Error),
 }
 
+pub struct RenderedText {
+    pub glyphs: Vec<RenderedGlyph>,
+    pub image: CoreGraphicsImage,
+}
+pub struct RenderedGlyph {
+    pub cursor_pos: (usize, usize),
+    pub top_left: (usize, usize),
+    pub size: (usize, usize),
+    pub glyph_pos: GlyphPosition,
+    pub glyph_info: GlyphInfo,
+}
+
 pub fn render_text(
     mut font_loader: impl DerefMut<Target = FontLoader>,
     font_path: PathBuf,
     paint_ctx: &mut PaintCtx,
-) -> CoreGraphicsImage {
+) -> RenderedText {
     // TODO remove unwraps!
 
     let font_data = font_loader.get(font_path, ForceLoad::False).unwrap();
@@ -164,10 +176,23 @@ pub fn render_text(
         // }
     }
 
-    // RgbaPremul seems correct, as RgbaSeparate generates kinda jaggy image
-    paint_ctx
-        .make_image(w, h, &text_pixels, ImageFormat::RgbaPremul)
-        .unwrap()
+    let glyphs = zip(xys, infos)
+        .map(
+            |((cursor_pos, top_left), ((w, h), &glyph_pos, &glyph_info))| RenderedGlyph {
+                cursor_pos,
+                top_left,
+                size: (w as usize, h as usize),
+                glyph_pos,
+                glyph_info,
+            },
+        )
+        .collect();
+    RenderedText {
+        image: paint_ctx
+            .make_image(w, h, &text_pixels, ImageFormat::RgbaPremul)
+            .unwrap(),
+        glyphs,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
