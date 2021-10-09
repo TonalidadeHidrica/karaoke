@@ -1,4 +1,3 @@
-use std::borrow::BorrowMut;
 use std::cmp::Eq;
 use std::collections::hash_map::Entry;
 use std::fs::File;
@@ -9,11 +8,9 @@ use std::{collections::HashMap, path::PathBuf};
 
 use druid::piet::CoreGraphicsImage;
 use druid::PaintCtx;
-use druid::{
-    piet::{ImageFormat, InterpolationMode},
-    RenderContext, Size, Widget,
-};
+use druid::{piet::ImageFormat, RenderContext};
 use freetype::{face::LoadFlag, Bitmap, Library, RenderMode};
+use itertools::{zip, Itertools};
 use rustybuzz::UnicodeBuffer;
 use thiserror::Error;
 
@@ -87,14 +84,56 @@ pub fn render_text(
 
     // TODO The buffer is too big
 
-    let size = paint_ctx.size();
-    let mut text_pixels = vec![0u8; (4. * size.width * size.height) as usize];
-
-    let (mut x, mut y) = (100, font_size as i32);
+    let (mut x, mut y) = (0, 0);
     let font_size_in_pixels = font_size as f64 * resolution as f64 / 72.0;
     let hb_scale = font_size_in_pixels / ft_face.em_size() as f64;
 
-    for (pos, info) in shape.glyph_positions().iter().zip(shape.glyph_infos()) {
+    let (xys, infos) = shape
+        .glyph_positions()
+        .iter()
+        .zip(shape.glyph_infos())
+        .map(|(pos, info)| {
+            ft_face
+                .load_glyph(info.codepoint, LoadFlag::DEFAULT)
+                .unwrap();
+            let glyph_slot = ft_face.glyph();
+            let bitmap = glyph_slot.bitmap();
+
+            let old_xy = (x, y);
+            let draw_x = x + glyph_slot.bitmap_left() + (pos.x_offset as f64 * hb_scale) as i32;
+            let draw_y = y - glyph_slot.bitmap_top() - (pos.y_offset as f64 * hb_scale) as i32;
+
+            x += (pos.x_advance as f64 * hb_scale) as i32;
+            y += (pos.y_advance as f64 * hb_scale) as i32;
+
+            (
+                (old_xy, (draw_x, draw_y)),
+                ((bitmap.width(), bitmap.rows()), pos, info),
+            )
+        })
+        .unzip::<_, _, Vec<_>, Vec<_>>();
+
+    let xs = zip(&xys, &infos).flat_map(|((_, xy), (wh, ..))| [xy.0, xy.0 + wh.0]);
+    let ys = zip(&xys, &infos).flat_map(|((_, xy), (wh, ..))| [xy.1, xy.1 + wh.1]);
+    // println!("{:?} {:?}", xs.clone().collect_vec(), ys.clone().collect_vec());
+    let (xs, ys, w, h) = match (xs.minmax().into_option(), ys.minmax().into_option()) {
+        (Some((xs, xt)), Some((ys, yt))) => (xs, ys, (xt - xs) as usize, (yt - ys) as usize),
+        _ => (0, 0, 0, 0),
+    };
+    let xys = xys
+        .into_iter()
+        .map(|((dx, dy), (x, y))| {
+            (
+                ((dx - xs) as usize, (dy - ys) as usize),
+                ((x - xs) as usize, (y - ys) as usize),
+            )
+        })
+        .collect_vec();
+    // println!("{:?} {:?}", (xs, ys, w, h), xys);
+
+    let mut text_pixels = vec![0u8; 4 * w * h];
+
+    for (&((_x, _y), (draw_x, draw_y)), (_, _, info)) in zip(&xys, &infos) {
         ft_face
             .load_glyph(info.codepoint, LoadFlag::DEFAULT)
             .unwrap();
@@ -103,32 +142,31 @@ pub fn render_text(
         let inner_bitmap = glyph.to_bitmap(RenderMode::Normal, None).unwrap();
         let inner_bitmap = inner_bitmap.bitmap();
 
-        let draw_x = x + glyph_slot.bitmap_left() + (pos.x_offset as f64 * hb_scale) as i32;
-        let draw_y = y - glyph_slot.bitmap_top() - (pos.y_offset as f64 * hb_scale) as i32;
-
         blend_bitmap(
             &mut text_pixels,
-            size.width as usize,
-            size.height as usize,
-            size.width as usize,
+            w,
+            h,
+            w,
             &inner_bitmap,
-            draw_x as usize,
-            draw_y as usize,
+            draw_x,
+            draw_y,
             [255, 255, 255],
         );
 
-        x += (pos.x_advance as f64 * hb_scale) as i32;
-        y += (pos.y_advance as f64 * hb_scale) as i32;
+        // // Draw red lines to the cursor positions
+        // for i in 0..10 {
+        //     if (0..w).contains(&x) {
+        //         if let Some(x) = text_pixels.get_mut((x + (y - i) * w) * 4..) {
+        //             x[0] = 255;
+        //             x[3] = 255;
+        //         }
+        //     }
+        // }
     }
 
     // RgbaPremul seems correct, as RgbaSeparate generates kinda jaggy image
     paint_ctx
-        .make_image(
-            size.width as usize,
-            size.height as usize,
-            &text_pixels,
-            ImageFormat::RgbaPremul,
-        )
+        .make_image(w, h, &text_pixels, ImageFormat::RgbaPremul)
         .unwrap()
 }
 
