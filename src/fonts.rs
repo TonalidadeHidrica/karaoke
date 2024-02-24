@@ -1,15 +1,14 @@
 use std::cmp::Eq;
 use std::collections::hash_map::Entry;
-use std::fs::File;
 use std::io::{BufReader, Read};
 use std::ops::DerefMut;
-use std::path::Path;
 use std::{collections::HashMap, path::PathBuf};
 
 use druid::piet::d2d::Bitmap as CoreGraphicsImage;
 use druid::PaintCtx;
 use druid::{piet::ImageFormat, RenderContext};
 use freetype::{face::LoadFlag, Bitmap, Library, RenderMode};
+use fs_err::File;
 use itertools::{zip, Itertools};
 use rustybuzz::{GlyphInfo, GlyphPosition, UnicodeBuffer};
 use thiserror::Error;
@@ -44,7 +43,7 @@ impl FontLoader {
     }
 }
 
-fn load_file_into_vec(path: impl AsRef<Path>) -> Result<Vec<u8>, FontLoadError> {
+fn load_file_into_vec(path: impl Into<PathBuf>) -> Result<Vec<u8>, FontLoadError> {
     let mut v = Vec::new();
     BufReader::new(File::open(path)?).read_to_end(&mut v)?;
     Ok(v)

@@ -1,9 +1,9 @@
 use std::{
-    fs::File,
     io::{BufReader, Read},
     path::PathBuf,
 };
 
+use fs_err::File;
 use serde::Deserialize;
 use thiserror::Error;
 

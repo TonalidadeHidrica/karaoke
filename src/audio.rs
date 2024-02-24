@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::fs::File;
 use std::io::BufReader;
 use std::iter;
 use std::iter::Peekable;
@@ -24,6 +23,7 @@ use dasp::signal::Sine;
 use dasp::signal::Take;
 use dasp::Signal;
 use derive_getters::Getters;
+use fs_err::File;
 use rodio::Decoder;
 use tokio::sync::watch;
 use universal_audio_decoder::new_uniform_source_iterator;
@@ -284,7 +284,7 @@ impl AudioOutputCallback {
     }
 
     fn load_music(&mut self, path: PathBuf) -> anyhow::Result<()> {
-        let file = std::fs::File::open(path)?;
+        let file = fs_err::File::open(path)?;
         let decoder = rodio::Decoder::new(BufReader::new(file))?;
         let ret = new_uniform_source_iterator(decoder, &self.output_stream_config);
         self.music = Some(ret);
