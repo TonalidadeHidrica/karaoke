@@ -6,7 +6,7 @@ use std::ops::DerefMut;
 use std::path::Path;
 use std::{collections::HashMap, path::PathBuf};
 
-use druid::piet::CoreGraphicsImage;
+use druid::piet::d2d::Bitmap as CoreGraphicsImage;
 use druid::PaintCtx;
 use druid::{piet::ImageFormat, RenderContext};
 use freetype::{face::LoadFlag, Bitmap, Library, RenderMode};
