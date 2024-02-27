@@ -19,7 +19,6 @@ use crate::schema::MeasureLength;
 use crate::schema::ScoreElementKind;
 use crate::schema::Track;
 use druid::im::OrdMap;
-use druid::im::Vector;
 use druid::keyboard_types::Key;
 use druid::kurbo::Line;
 use druid::piet::IntoBrush;
@@ -155,7 +154,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                             .filter_map(|(i, x)| {
                                 (x.start_beat()..=&x.end_beat())
                                     .contains(&&data.cursor_position)
-                                    .then(|| i)
+                                    .then_some(i)
                             })
                             .peekable();
                         let first = candidates.peek().copied();
@@ -561,6 +560,11 @@ impl ScoreEditor {
     }
 
     fn edit_lyrics_mapping(&self, ctx: &mut EventCtx, data: &ScoreEditorData) {
+        // TODO: I remember I implemented the feature of showing & editing lyrics mapping.
+        // So there must be somewhere implementation using this variable...
+        // Maybe in my old backup, did I just forgot pushing?
+        // For now, I'll suppress the warning, as it is no use
+        #[allow(unused)]
         let i = match data.selected_track {
             Some(i) => i,
             _ => return,
@@ -618,7 +622,7 @@ impl ScoreEditor {
             .find(|row| row.y_range().contains(&event.pos.y))?;
         let length = BeatLength(BigRational::from_float((event.pos.x / BEAT_WIDTH).trunc())?);
         let beat = &row.beat_start + &length;
-        row.contains_beat(&beat).then(|| beat)
+        row.contains_beat(&beat).then_some(beat)
     }
 }
 

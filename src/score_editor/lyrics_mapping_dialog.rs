@@ -94,7 +94,7 @@ impl Widget<ScoreEditorData> for LyricsMappingEditor {
                         .insert((
                             lyrics.text.to_owned(),
                             render_text(
-                                (&*font_loader).borrow_mut(),
+                                (*font_loader).borrow_mut(),
                                 data.score.font_file.clone(),
                                 ctx,
                                 &lyrics.text,

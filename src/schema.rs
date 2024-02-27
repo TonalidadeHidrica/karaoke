@@ -11,7 +11,6 @@ use std::path::PathBuf;
 use derive_more::From;
 use derive_new::new;
 use druid::im::OrdMap;
-use druid::im::OrdSet;
 use druid::im::Vector;
 use druid::Data;
 use druid::Lens;
