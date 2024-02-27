@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use super::bpm_detector::BpmDetectorData;
 use crate::schema::BeatLength;
 use crate::schema::BeatPosition;
@@ -11,6 +13,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize, new, Data, Lens)]
 pub struct ScoreEditorData {
     pub score: Score,
+    #[serde(skip)]
+    #[data(eq)]
+    #[new(default)]
+    pub save_path: PathBuf,
 
     #[new(value = "BeatPosition::zero()")]
     pub cursor_position: BeatPosition,

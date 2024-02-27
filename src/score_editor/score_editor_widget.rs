@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::collections::binary_heap::PeekMut;
 use std::collections::BinaryHeap;
+use std::io::BufWriter;
 use std::ops::Range;
 use std::rc::Rc;
 use std::sync::mpsc;
@@ -44,6 +45,7 @@ use druid::Size;
 use druid::Widget;
 use druid::WidgetExt;
 use druid::WindowDesc;
+use fs_err::File;
 use itertools::iterate;
 use itertools::Itertools;
 use num_rational::BigRational;
@@ -184,6 +186,19 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                         // Remove lyrics
                         if let Some(i) = data.selected_track {
                             data.score.tracks[i].lyrics = None;
+                        }
+                    }
+                    "s" => {
+                        if mods.contains(Modifiers::CONTROL) {
+                            match (|| {
+                                anyhow::Ok(serde_json::to_writer(
+                                    BufWriter::new(File::create(&data.save_path)?),
+                                    &data,
+                                )?)
+                            })() {
+                                Ok(_) => println!("Saved successfully"),
+                                Err(e) => println!("Could not save data: {e}"),
+                            }
                         }
                     }
                     _ => {}
