@@ -15,15 +15,40 @@ use druid::im::Vector;
 use druid::Data;
 use druid::Lens;
 use itertools::Itertools;
-use num::rational::BigRational;
-use num::BigInt;
-use num::One;
-use num::ToPrimitive;
-use num::Zero;
+use num_bigint::BigInt;
+use num_rational::BigRational;
+use num_traits::One;
+use num_traits::ToPrimitive;
+use num_traits::Zero;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, From, Debug, derive_more::Display, Data)]
+#[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    From,
+    Debug,
+    derive_more::Display,
+    Serialize,
+    Deserialize,
+    Data,
+)]
 pub struct BeatPosition(#[data(eq)] pub BigRational);
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, From, Debug, derive_more::Display, Data)]
+#[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    From,
+    Debug,
+    derive_more::Display,
+    Serialize,
+    Deserialize,
+    Data,
+)]
 pub struct BeatLength(#[data(eq)] pub BigRational);
 
 impl BeatPosition {
@@ -114,7 +139,15 @@ impl Sub<&BeatPosition> for &BeatPosition {
     }
 }
 
-#[derive(Clone, Debug, derive_more::From, derive_more::FromStr, derive_more::Display)]
+#[derive(
+    Clone,
+    Debug,
+    derive_more::From,
+    derive_more::FromStr,
+    derive_more::Display,
+    Serialize,
+    Deserialize,
+)]
 pub struct BigIntData(BigInt);
 
 impl Data for BigIntData {
@@ -123,7 +156,7 @@ impl Data for BigIntData {
     }
 }
 
-#[derive(Clone, Debug, derive_more::Display, Data, Lens)]
+#[derive(Clone, Debug, derive_more::Display, Serialize, Deserialize, Data, Lens)]
 #[display(fmt = "{}/{}", numerator, denominator)]
 pub struct MeasureLength {
     numerator: BigIntData,
@@ -165,7 +198,9 @@ impl MeasureLength {
     }
 }
 
-#[derive(Clone, Copy, Debug, derive_more::FromStr, derive_more::Display, Data)]
+#[derive(
+    Clone, Copy, Debug, derive_more::FromStr, derive_more::Display, Serialize, Deserialize, Data,
+)]
 pub struct Bpm(pub f64);
 
 impl Default for Bpm {
@@ -212,7 +247,7 @@ impl Mul<BeatLength> for Bpm {
     }
 }
 
-#[derive(Clone, Debug, new, Data, Lens)]
+#[derive(Clone, Debug, Serialize, Deserialize, new, Data, Lens)]
 pub struct Score {
     #[new(default)]
     pub tracks: Vector<Track>,
@@ -287,14 +322,14 @@ pub fn time_to_beat(offset: f64, bpms: &OrdMap<BeatPosition, Bpm>, time: f64) ->
     last_beat + (time - cur_time) / bpm.beat_length()
 }
 
-#[derive(Clone, Debug, Data)]
+#[derive(Clone, Debug, Serialize, Deserialize, Data)]
 pub struct Track {
     pub start_beat: BeatPosition,
     pub elements: Vector<ScoreElement>,
     pub lyrics: Option<Lyrics>,
 }
 
-#[derive(Clone, Debug, Data)]
+#[derive(Clone, Debug, Serialize, Deserialize, Data)]
 pub struct Lyrics {
     pub text: String,
     pub mappings: OrdMap<(usize, usize), usize>,
@@ -320,13 +355,13 @@ impl Track {
     }
 }
 
-#[derive(Clone, PartialEq, Debug, Data)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize, Data)]
 pub struct ScoreElement {
     pub kind: ScoreElementKind,
     pub length: BeatLength,
 }
 
-#[derive(Clone, Copy, PartialEq, Debug, Data)]
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize, Data)]
 pub enum ScoreElementKind {
     Start,
     Stop,
@@ -462,7 +497,7 @@ mod test {
     use druid::im::ordmap;
     use itertools::iterate;
     use itertools::Itertools;
-    use num::BigRational;
+    use num_rational::BigRational;
 
     macro_rules! bp {
         ($a: expr) => {

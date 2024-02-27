@@ -46,8 +46,8 @@ use druid::WidgetExt;
 use druid::WindowDesc;
 use itertools::iterate;
 use itertools::Itertools;
-use num::BigRational;
-use num::ToPrimitive;
+use num_rational::BigRational;
+use num_traits::ToPrimitive;
 
 use super::bpm_detector::build_bpm_detector_widget;
 use super::bpm_dialog::build_bpm_dialog;

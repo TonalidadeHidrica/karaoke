@@ -5,7 +5,7 @@ use crate::schema::ScoreElement;
 use crate::schema::ScoreElementKind;
 use itertools::iterate;
 use itertools::Itertools;
-use num::BigRational;
+use num_rational::BigRational;
 
 use super::data::ScoreEditorData;
 use super::score_editor_widget::ScoreRow;

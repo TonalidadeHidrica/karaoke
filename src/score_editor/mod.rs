@@ -28,7 +28,7 @@ use druid::Insets;
 use druid::Widget;
 use druid::WidgetExt;
 use druid::WidgetId;
-use num::BigRational;
+use num_rational::BigRational;
 
 use self::formatting::beat_label_string;
 use self::formatting::format_time;

@@ -1,8 +1,8 @@
 use crate::schema::BeatLength;
 use crate::schema::BeatPosition;
-use num::BigRational;
-use num::ToPrimitive;
-use num::Zero;
+use num_rational::BigRational;
+use num_traits::ToPrimitive;
+use num_traits::Zero;
 
 use super::data::ScoreEditorData;
 

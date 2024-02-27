@@ -6,8 +6,9 @@ use derive_new::new;
 use druid::text::Selection;
 use druid::Data;
 use druid::Lens;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, new, Data, Lens)]
+#[derive(Clone, Debug, Serialize, Deserialize, new, Data, Lens)]
 pub struct ScoreEditorData {
     pub score: Score,
 
@@ -23,8 +24,10 @@ pub struct ScoreEditorData {
     pub music_volume: f64,
     #[new(value = "0.4")]
     pub metronome_volume: f64,
+    #[serde(skip)]
     #[new(default)]
     pub bpm_detector_data: BpmDetectorData,
+    #[serde(skip)]
     #[new(default)]
     #[data(eq)]
     pub selection: Option<Selection>,
@@ -33,7 +36,7 @@ pub struct ScoreEditorData {
     pub music_playback_position: Option<MusicPlaybackPositionData>,
 }
 
-#[derive(Clone, Debug, Data)]
+#[derive(Clone, Debug, Serialize, Deserialize, Data)]
 pub struct MusicPlaybackPositionData {
     pub time: f64,
     pub beat: BeatPosition,

@@ -1,6 +1,7 @@
 use std::cmp::Eq;
 use std::collections::hash_map::Entry;
 use std::io::{BufReader, Read};
+use std::iter::zip;
 use std::ops::DerefMut;
 use std::{collections::HashMap, path::PathBuf};
 
@@ -9,7 +10,7 @@ use druid::PaintCtx;
 use druid::{piet::ImageFormat, RenderContext};
 use freetype::{face::LoadFlag, Bitmap, Library, RenderMode};
 use fs_err::File;
-use itertools::{zip, Itertools};
+use itertools::Itertools;
 use rustybuzz::{GlyphInfo, GlyphPosition, UnicodeBuffer};
 use thiserror::Error;
 
