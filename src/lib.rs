@@ -9,3 +9,4 @@ pub mod fonts;
 pub mod linest;
 pub mod schema;
 pub mod score_editor;
+pub mod serde_ord_map;

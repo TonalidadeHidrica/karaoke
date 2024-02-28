@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 use std::cmp::Ordering::*;
+use std::convert::Infallible;
 use std::iter;
 use std::ops::Add;
 use std::ops::AddAssign;
@@ -21,6 +22,10 @@ use num_traits::One;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
+
+use crate::serde_ord_map;
+use crate::serde_ord_map::DeserializeKey;
+use crate::serde_ord_map::SerializeKey;
 
 #[derive(
     Clone,
@@ -139,6 +144,20 @@ impl Sub<&BeatPosition> for &BeatPosition {
     }
 }
 
+impl SerializeKey for BeatPosition {
+    type Error = Infallible;
+    fn serialize_key(&self) -> Result<String, Infallible> {
+        self.0.serialize_key()
+    }
+}
+
+impl DeserializeKey for BeatPosition {
+    type Error = anyhow::Error;
+    fn deserialize_key(s: &str) -> anyhow::Result<Self> {
+        BigRational::deserialize_key(s).map(Self)
+    }
+}
+
 #[derive(
     Clone,
     Debug,
@@ -252,8 +271,10 @@ pub struct Score {
     #[new(default)]
     pub tracks: Vector<Track>,
     #[new(default)]
+    #[serde(with = "serde_ord_map")]
     pub measure_lengths: OrdMap<BeatPosition, MeasureLength>,
     #[new(default)]
+    #[serde(with = "serde_ord_map")]
     pub bpms: OrdMap<BeatPosition, Bpm>,
     #[new(default)]
     pub offset: f64,
@@ -332,6 +353,7 @@ pub struct Track {
 #[derive(Clone, Debug, Serialize, Deserialize, Data)]
 pub struct Lyrics {
     pub text: String,
+    #[serde(with = "serde_ord_map")]
     pub mappings: OrdMap<(usize, usize), usize>,
 }
 
