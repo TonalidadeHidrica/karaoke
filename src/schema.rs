@@ -144,6 +144,14 @@ impl Sub<&BeatPosition> for &BeatPosition {
     }
 }
 
+impl Mul<u64> for BeatLength {
+    type Output = BeatLength;
+
+    fn mul(self, rhs: u64) -> BeatLength {
+        BeatLength(self.0 * BigInt::from(rhs))
+    }
+}
+
 impl SerializeKey for BeatPosition {
     type Error = Infallible;
     fn serialize_key(&self) -> Result<String, Infallible> {

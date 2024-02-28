@@ -213,13 +213,23 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     }
                 }
                 Key::ArrowLeft => {
-                    data.cursor_position -= &data.cursor_delta;
+                    let delta = if mods.alt() {
+                        data.cursor_delta.clone() * 16u64
+                    } else {
+                        data.cursor_delta.clone()
+                    };
+                    data.cursor_position -= &delta;
                     if data.cursor_position < BeatPosition::zero() {
                         data.cursor_position = BeatPosition::zero();
                     }
                 }
                 Key::ArrowRight => {
-                    data.cursor_position += &data.cursor_delta;
+                    let delta = if mods.alt() {
+                        data.cursor_delta.clone() * 16u64
+                    } else {
+                        data.cursor_delta.clone()
+                    };
+                    data.cursor_position += &delta;
                 }
                 Key::ArrowUp => {
                     let mut it = cursor_delta_candidates();
