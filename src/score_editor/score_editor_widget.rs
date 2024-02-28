@@ -171,7 +171,9 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                         }
                     }
                     "x" => {
-                        data.selected_track.map(|i| data.score.tracks.remove(i));
+                        if let Some(i) = data.selected_track.take() {
+                            data.score.tracks.remove(i);
+                        }
                     }
                     "m" => self.edit_measure_length(ctx, data),
                     "b" => self.edit_bpm(ctx, data),
