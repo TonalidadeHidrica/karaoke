@@ -120,6 +120,7 @@ pub struct TrackView {
 
 impl Widget<ScoreEditorData> for ScoreEditor {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut ScoreEditorData, _env: &Env) {
+        let mut data_updated = false;
         match event {
             Event::WindowConnected => {
                 ctx.request_focus();
@@ -128,15 +129,18 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 Key::Character(s) => match s.as_str() {
                     "1" => {
                         append_element(data, ScoreElementKind::Start);
+                        data_updated = true;
                     }
                     "2" => {
                         append_element(data, ScoreElementKind::Stop);
+                        data_updated = true;
                     }
                     " " => {
                         if mods.contains(Modifiers::SHIFT) {
                             self.toggle_music_play(ctx, data).unwrap();
                         } else {
                             append_element(data, ScoreElementKind::Skip);
+                            data_updated = true;
                         }
                     }
                     "a" => {
@@ -146,6 +150,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                             lyrics: None,
                         });
                         data.selected_track = Some(data.score.tracks.len() - 1);
+                        data_updated = true;
                     }
                     "t" => {
                         let mut candidates = data
@@ -168,27 +173,42 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                             }
                         } else {
                             first
-                        }
+                        };
+                        data_updated = true;
                     }
                     "x" => {
                         if let Some(i) = data.selected_track.take() {
                             data.score.tracks.remove(i);
                         }
+                        data_updated = true;
                     }
-                    "m" => self.edit_measure_length(ctx, data),
-                    "b" => self.edit_bpm(ctx, data),
-                    "B" => self.open_bpm_detector(ctx),
+                    "m" => {
+                        self.edit_measure_length(ctx, data);
+                        data_updated = true;
+                    }
+                    "b" => {
+                        self.edit_bpm(ctx, data);
+                        data_updated = true;
+                    }
+                    "B" => {
+                        self.open_bpm_detector(ctx);
+                        data_updated = true;
+                    }
                     "/" => {
                         if let Some(time) = self.audio_manager.playback_position() {
                             data.bpm_detector_data.push(time);
                         }
                     }
-                    "l" => self.edit_lyrics_mapping(ctx, data),
+                    "l" => {
+                        self.edit_lyrics_mapping(ctx, data);
+                        data_updated = true;
+                    }
                     "L" => {
                         // Remove lyrics
                         if let Some(i) = data.selected_track {
                             data.score.tracks[i].lyrics = None;
                         }
+                        data_updated = true;
                     }
                     "s" => {
                         if mods.contains(Modifiers::CONTROL) {
@@ -198,7 +218,10 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                                     &data,
                                 )?)
                             })() {
-                                Ok(_) => println!("Saved successfully"),
+                                Ok(_) => {
+                                    println!("Saved successfully");
+                                    data.has_unsaved_updates = false;
+                                }
                                 Err(e) => println!("Could not save data: {e}"),
                             }
                         }
@@ -212,6 +235,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     {
                         track.elements.pop_back();
                         data.cursor_position -= &data.cursor_delta;
+                        data_updated = true;
                     }
                 }
                 Key::ArrowLeft => {
@@ -276,6 +300,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                             .insert(command.position, measure_length),
                         None => data.score.measure_lengths.remove(&command.position),
                     };
+                    data_updated = true;
                 } else if let Some(command) =
                     command.get(EDIT_BPM_SELECTOR).and_then(SingleUse::take)
                 {
@@ -283,6 +308,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                         Some(bpm) => data.score.bpms.insert(command.position, bpm),
                         None => data.score.bpms.remove(&command.position),
                     };
+                    data_updated = true;
                 } else if let Some(selection) = command.get(UPDATE_SELECTION_SELECTOR) {
                     data.selection = selection.to_owned();
                 } else if let Some(()) = command.get(SET_LYRICS_RANGE) {
@@ -295,6 +321,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                                 mappings: OrdMap::new(),
                             });
                         }
+                        data_updated = true;
                     }
                 }
             }
@@ -314,6 +341,14 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             }
             _ => {}
         }
+        if data_updated {
+            data.has_unsaved_updates = true;
+        }
+        ctx.window().set_title(if data.has_unsaved_updates {
+            "Unsaved"
+        } else {
+            "Saved"
+        })
     }
 
     fn lifecycle(

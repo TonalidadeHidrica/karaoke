@@ -40,6 +40,10 @@ pub struct ScoreEditorData {
 
     #[new(default)]
     pub music_playback_position: Option<MusicPlaybackPositionData>,
+
+    #[serde(skip)]
+    #[new(default)]
+    pub has_unsaved_updates: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Data)]
