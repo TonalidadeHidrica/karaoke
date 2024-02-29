@@ -27,6 +27,10 @@ use druid::piet::Piet;
 use druid::piet::Text;
 use druid::piet::TextLayoutBuilder;
 use druid::theme::TEXT_COLOR;
+use druid::widget::Button;
+use druid::widget::Flex;
+use druid::widget::Label;
+use druid::Application;
 use druid::Color;
 use druid::Data;
 use druid::Env;
@@ -44,7 +48,9 @@ use druid::SingleUse;
 use druid::Size;
 use druid::Widget;
 use druid::WidgetExt;
+use druid::WindowConfig;
 use druid::WindowDesc;
+use druid::WindowSizePolicy;
 use fs_err::File;
 use itertools::iterate;
 use itertools::Itertools;
@@ -119,7 +125,7 @@ pub struct TrackView {
 }
 
 impl Widget<ScoreEditorData> for ScoreEditor {
-    fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut ScoreEditorData, _env: &Env) {
+    fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut ScoreEditorData, env: &Env) {
         let mut data_updated = false;
         match event {
             Event::WindowConnected => {
@@ -212,18 +218,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     }
                     "s" => {
                         if mods.contains(Modifiers::CONTROL) {
-                            match (|| {
-                                anyhow::Ok(serde_json::to_writer(
-                                    BufWriter::new(File::create(&data.save_path)?),
-                                    &data,
-                                )?)
-                            })() {
-                                Ok(_) => {
-                                    println!("Saved successfully");
-                                    data.has_unsaved_updates = false;
-                                }
-                                Err(e) => println!("Could not save data: {e}"),
-                            }
+                            save_data(data);
                         }
                     }
                     _ => {}
@@ -339,9 +334,11 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     ctx.request_anim_frame();
                 }
             }
+            Event::WindowCloseRequested => self.close_requested(ctx, data, env),
             _ => {}
         }
         if data_updated {
+            println!("Updated");
             data.has_unsaved_updates = true;
         }
         ctx.window().set_title(if data.has_unsaved_updates {
@@ -575,6 +572,25 @@ impl Widget<ScoreEditorData> for ScoreEditor {
     }
 }
 
+fn save_data(data: &mut ScoreEditorData) -> bool {
+    match (|| {
+        anyhow::Ok(serde_json::to_writer(
+            BufWriter::new(File::create(&data.save_path)?),
+            &data,
+        )?)
+    })() {
+        Ok(_) => {
+            println!("Saved successfully");
+            data.has_unsaved_updates = false;
+            true
+        }
+        Err(e) => {
+            println!("Could not save data: {e}");
+            false
+        }
+    }
+}
+
 impl ScoreEditor {
     fn send_volume(&self, data: &ScoreEditorData) {
         self.audio_manager
@@ -685,6 +701,35 @@ impl ScoreEditor {
         let length = BeatLength(BigRational::from_float((event.pos.x / BEAT_WIDTH).trunc())?);
         let beat = &row.beat_start + &length;
         row.contains_beat(&beat).then_some(beat)
+    }
+
+    fn close_requested(&self, ctx: &mut EventCtx, data: &ScoreEditorData, env: &Env) {
+        if !data.has_unsaved_updates {
+            return;
+        }
+        ctx.set_handled();
+        let widget = Flex::column()
+            .with_child(Label::new("Save before closing?"))
+            .with_child(
+                Flex::row()
+                    .with_child(Button::new("Save").on_click(|_, data, _| {
+                        if save_data(data) {
+                            Application::global().quit();
+                        }
+                    }))
+                    .with_child(
+                        Button::new("Don't save").on_click(|_, _, _| Application::global().quit()),
+                    )
+                    .with_child(
+                        Button::new("Cancel closing").on_click(|ctx, _, _| ctx.window().close()),
+                    ),
+            );
+        ctx.new_sub_window(
+            WindowConfig::default().window_size_policy(WindowSizePolicy::Content),
+            widget,
+            data.clone(),
+            env.clone(),
+        );
     }
 }
 
