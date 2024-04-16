@@ -11,7 +11,7 @@ use cpal::traits::DeviceTrait;
 use cpal::traits::HostTrait;
 use cpal::traits::StreamTrait;
 use cpal::OutputCallbackInfo;
-use cpal::Sample;
+use cpal::SizedSample;
 use cpal::Stream;
 use cpal::StreamConfig;
 use dasp::signal;
@@ -99,9 +99,17 @@ impl AudioManager {
             use cpal::SampleFormat::*;
             let (sc, ec) = (&stream_config, error_callback);
             match sample_format {
-                I16 => device.build_output_stream(sc, callback.into_callback::<i16>(), ec),
-                U16 => device.build_output_stream(sc, callback.into_callback::<u16>(), ec),
-                F32 => device.build_output_stream(sc, callback.into_callback::<f32>(), ec),
+                I8 => device.build_output_stream(sc, callback.into_callback::<i8>(), ec, None),
+                I16 => device.build_output_stream(sc, callback.into_callback::<i16>(), ec, None),
+                I32 => device.build_output_stream(sc, callback.into_callback::<i32>(), ec, None),
+                I64 => device.build_output_stream(sc, callback.into_callback::<i64>(), ec, None),
+                U8 => device.build_output_stream(sc, callback.into_callback::<u8>(), ec, None),
+                U16 => device.build_output_stream(sc, callback.into_callback::<u16>(), ec, None),
+                U32 => device.build_output_stream(sc, callback.into_callback::<u32>(), ec, None),
+                U64 => device.build_output_stream(sc, callback.into_callback::<u64>(), ec, None),
+                F32 => device.build_output_stream(sc, callback.into_callback::<f32>(), ec, None),
+                F64 => device.build_output_stream(sc, callback.into_callback::<f64>(), ec, None),
+                _ => return Err(AudioError::SampleFormatError(sample_format)),
             }
         }?;
         stream.play()?;
@@ -184,7 +192,7 @@ impl AudioOutputCallback {
 impl AudioOutputCallback {
     fn callback<S>(&mut self, out: &mut [S], callback_info: &OutputCallbackInfo)
     where
-        S: Sample,
+        S: SizedSample + cpal::FromSample<f32>,
     {
         while let Some(command) = match self.command_receiver.try_recv() {
             Ok(command) => Some(command),
@@ -234,7 +242,7 @@ impl AudioOutputCallback {
             next *= self.music_volume as f32;
             next += self.sound_effects.iter_mut().map(|x| x.next()).sum::<f64>() as f32;
             let next = next.clamp(-1.5, 1.5); // Prevent too large sound
-            *out = S::from(&next);
+            *out = S::from_sample(next);
         }
 
         self.playback_time = playback_end;
@@ -293,7 +301,7 @@ impl AudioOutputCallback {
 
     fn into_callback<S>(mut self) -> impl FnMut(&mut [S], &OutputCallbackInfo) + Send + 'static
     where
-        S: Sample,
+        S: SizedSample + cpal::FromSample<f32>,
     {
         move |a, b| self.callback(a, b)
     }

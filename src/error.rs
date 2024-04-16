@@ -1,5 +1,6 @@
 use cpal::BuildStreamError;
 use cpal::PlayStreamError;
+use cpal::SampleFormat;
 use cpal::SupportedStreamConfigsError;
 use druid::PlatformError;
 use thiserror::Error;
@@ -26,4 +27,6 @@ pub enum AudioError {
     BuildStreamError(#[from] BuildStreamError),
     #[error("{0}")]
     PlayStreamError(#[from] PlayStreamError),
+    #[error("Unsupported sample format: {0:?}")]
+    SampleFormatError(SampleFormat),
 }

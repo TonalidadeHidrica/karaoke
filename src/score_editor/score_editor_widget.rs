@@ -338,7 +338,6 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             _ => {}
         }
         if data_updated {
-            println!("Updated");
             data.has_unsaved_updates = true;
         }
         ctx.window().set_title(if data.has_unsaved_updates {
