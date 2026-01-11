@@ -746,7 +746,7 @@ fn draw_track(
     let is_first = &row.beat_start <= track.start_beat();
     let is_final = track_end_beat <= row.beat_end;
 
-    let lyrics_height = if is_first && track.lyrics.is_some() {
+    let lyrics_height = if track.lyrics.is_some() {
         LYRICS_HEIGHT
     } else {
         0.
@@ -759,7 +759,7 @@ fn draw_track(
             get_x(&row.beat_end),
             track_view.y + NOTE_FULL_HEIGHT + lyrics_height,
         );
-        ctx.clip(rect);
+        ctx.clip(rect.inset(Insets::uniform_xy(CONTINUED_STICKOUT, 0.)));
         let track_rect = rect.inset(Insets::uniform_xy(
             0.0,
             (NOTE_HEIGHT - NOTE_FULL_HEIGHT) / 2.0,
@@ -768,17 +768,22 @@ fn draw_track(
         let min_x = if is_first {
             get_x(track.start_beat())
         } else {
-            track_rect.min_x() - 20.0
+            track_rect.min_x()
         };
         let max_x = if is_final {
             get_x(&track_end_beat)
         } else {
-            track_rect.max_x() + 20.0
+            track_rect.max_x()
         };
 
         {
-            let rect = Rect::new(min_x, track_rect.min_y(), max_x, track_rect.max_y())
-                .to_rounded_rect(4.0);
+            let rect = Rect::new(
+                min_x - if is_first { 0. } else { CONTINUED_STICKOUT },
+                track_rect.min_y(),
+                max_x + if is_final { 0. } else { CONTINUED_STICKOUT },
+                track_rect.max_y(),
+            )
+            .to_rounded_rect(4.0);
             let (fill_brush, stroke_brush) = match selected {
                 false => (Color::rgb8(0, 66, 19), Color::rgb8(0, 46, 13)),
                 true => (Color::rgb8(66, 0, 69), Color::rgb8(32, 0, 46)),
