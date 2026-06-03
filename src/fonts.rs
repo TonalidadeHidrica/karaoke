@@ -119,7 +119,7 @@ pub fn render_text(
         .zip(shape.glyph_infos())
         .map(|(pos, info)| {
             ft_face
-                .load_glyph(info.codepoint, LoadFlag::DEFAULT)
+                .load_glyph(info.glyph_id, LoadFlag::DEFAULT)
                 .unwrap();
             let glyph_slot = ft_face.glyph();
             let bitmap = glyph_slot.bitmap();
@@ -164,7 +164,7 @@ pub fn render_text(
 
     for (&((_x, _y), (draw_x, draw_y)), (_, _, info)) in zip(&xys, &infos) {
         ft_face
-            .load_glyph(info.codepoint, LoadFlag::DEFAULT)
+            .load_glyph(info.glyph_id, LoadFlag::DEFAULT)
             .unwrap();
         let glyph_slot = ft_face.glyph();
         let glyph = glyph_slot.get_glyph().unwrap();
