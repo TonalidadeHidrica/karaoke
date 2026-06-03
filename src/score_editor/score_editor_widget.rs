@@ -665,7 +665,7 @@ impl ScoreEditor {
         &self,
         ctx: &mut EventCtx,
         data: &mut ScoreEditorData,
-    ) -> Result<(), mpsc::SendError<impl std::any::Any>> {
+    ) -> Result<(), mpsc::SendError<impl std::any::Any + use<>>> {
         let sender = self.audio_manager.command_sender();
         if data.playing_music {
             sender.send(AudioCommand::Pause)?;

@@ -2,7 +2,7 @@
 name = "karaoke"
 version = "0.1.0"
 authors = ["TonalidadeHidrica <47710717+TonalidadeHidrica@users.noreply.github.com>"]
-edition = "2021"
+edition = "2024"
 default-run = "karaoke"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
