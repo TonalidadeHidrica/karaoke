@@ -217,6 +217,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                         data_updated = true;
                     }
                     "s" => {
+                        #[allow(clippy::collapsible_match)]
                         if mods.contains(Modifiers::CONTROL) {
                             save_data(data);
                         }
@@ -604,11 +605,15 @@ impl ScoreEditor {
 
     fn edit_measure_length(&self, ctx: &mut EventCtx, data: &ScoreEditorData) {
         let cursor_position = data.cursor_position.to_owned();
-        let (already_exsits, current_measure_length) =
-            match data.score.measure_lengths.range(..=&cursor_position).next_back() {
-                None => (false, MeasureLength::default()),
-                Some((k, v)) => (k == &cursor_position, v.to_owned()),
-            };
+        let (already_exsits, current_measure_length) = match data
+            .score
+            .measure_lengths
+            .range(..=&cursor_position)
+            .next_back()
+        {
+            None => (false, MeasureLength::default()),
+            Some((k, v)) => (k == &cursor_position, v.to_owned()),
+        };
         let widget_id = ctx.widget_id();
         let window_desc = WindowDesc::new(build_measure_dialog::<ScoreEditorData>(
             widget_id,
@@ -621,11 +626,11 @@ impl ScoreEditor {
 
     fn edit_bpm(&self, ctx: &mut EventCtx, data: &ScoreEditorData) {
         let cursor_position = data.cursor_position.to_owned();
-        let (already_exsits, current_bpm) = match data.score.bpms.range(..=&cursor_position).next_back()
-        {
-            None => (false, Bpm::default()),
-            Some((k, v)) => (k == &cursor_position, *v),
-        };
+        let (already_exsits, current_bpm) =
+            match data.score.bpms.range(..=&cursor_position).next_back() {
+                None => (false, Bpm::default()),
+                Some((k, v)) => (k == &cursor_position, *v),
+            };
         let widget_id = ctx.widget_id();
         let window_desc = WindowDesc::new(build_bpm_dialog::<ScoreEditorData>(
             widget_id,
