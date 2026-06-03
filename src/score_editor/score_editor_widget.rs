@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::cmp::Reverse;
-use std::collections::binary_heap::PeekMut;
 use std::collections::BinaryHeap;
+use std::collections::binary_heap::PeekMut;
 use std::io::BufWriter;
 use std::ops::Range;
 use std::rc::Rc;
@@ -11,7 +11,6 @@ use crate::audio::AudioCommand;
 use crate::audio::AudioManager;
 use crate::audio::SoundEffectSchedule;
 use crate::fonts::FontLoader;
-use crate::schema::iterate_beat_times;
 use crate::schema::BeatLength;
 use crate::schema::BeatPosition;
 use crate::schema::Bpm;
@@ -19,17 +18,7 @@ use crate::schema::Lyrics;
 use crate::schema::MeasureLength;
 use crate::schema::ScoreElementKind;
 use crate::schema::Track;
-use druid::im::OrdMap;
-use druid::keyboard_types::Key;
-use druid::kurbo::Line;
-use druid::piet::IntoBrush;
-use druid::piet::Piet;
-use druid::piet::Text;
-use druid::piet::TextLayoutBuilder;
-use druid::theme::TEXT_COLOR;
-use druid::widget::Button;
-use druid::widget::Flex;
-use druid::widget::Label;
+use crate::schema::iterate_beat_times;
 use druid::Application;
 use druid::Color;
 use druid::Data;
@@ -51,9 +40,20 @@ use druid::WidgetExt;
 use druid::WindowConfig;
 use druid::WindowDesc;
 use druid::WindowSizePolicy;
+use druid::im::OrdMap;
+use druid::keyboard_types::Key;
+use druid::kurbo::Line;
+use druid::piet::IntoBrush;
+use druid::piet::Piet;
+use druid::piet::Text;
+use druid::piet::TextLayoutBuilder;
+use druid::theme::TEXT_COLOR;
+use druid::widget::Button;
+use druid::widget::Flex;
+use druid::widget::Label;
 use fs_err::File;
-use itertools::iterate;
 use itertools::Itertools;
+use itertools::iterate;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
 
@@ -216,7 +216,8 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                         }
                         data_updated = true;
                     }
-                    "s" => {
+                    "s" =>
+                    {
                         #[allow(clippy::collapsible_match)]
                         if mods.contains(Modifiers::CONTROL) {
                             save_data(data);
@@ -308,6 +309,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 } else if let Some(selection) = command.get(UPDATE_SELECTION_SELECTOR) {
                     data.selection = selection.to_owned();
                 } else if let Some(()) = command.get(SET_LYRICS_RANGE) {
+                    #[allow(clippy::collapsible_if)]
                     if let (Some(track), Some(selection)) = (data.selected_track, data.selection) {
                         let (s, t) = (selection.anchor, selection.active);
                         let (s, t) = (s.min(t), s.max(t));
@@ -323,14 +325,14 @@ impl Widget<ScoreEditorData> for ScoreEditor {
             }
             Event::AnimFrame(..) => {
                 if data.playing_music {
-                    if let Some(time) = self.audio_manager.playback_position() {
-                        if let Some(beat) = BigRational::from_float(data.score.time_to_beat(time)) {
-                            let pos = MusicPlaybackPositionData {
-                                time,
-                                beat: beat.into(),
-                            };
-                            data.music_playback_position = Some(pos);
-                        }
+                    if let Some(time) = self.audio_manager.playback_position()
+                        && let Some(beat) = BigRational::from_float(data.score.time_to_beat(time))
+                    {
+                        let pos = MusicPlaybackPositionData {
+                            time,
+                            beat: beat.into(),
+                        };
+                        data.music_playback_position = Some(pos);
                     }
                     ctx.request_anim_frame();
                 }
@@ -457,9 +459,9 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 let beat_end = track.end_beat().min(row.beat_end.clone());
                 while let Some(popped) = end_queue
                     .peek_mut()
-                    .and_then(|p| (p.0 .0 <= beat_start).then(|| PeekMut::pop(p)))
+                    .and_then(|p| (p.0.0 <= beat_start).then(|| PeekMut::pop(p)))
                 {
-                    available_slots.push(Reverse(popped.0 .1));
+                    available_slots.push(Reverse(popped.0.1));
                 }
                 let slot = available_slots.pop().map_or(end_queue.len(), |x| x.0);
                 end_queue.push(Reverse((beat_end.clone(), slot)));
@@ -515,16 +517,16 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                 draw_cursor(ctx, get_x, &data.cursor_position, row.y, &Color::GREEN, 3.0);
             }
             // Draw music playback cursor
-            if let Some(beat) = data.music_playback_position.as_ref().map(|p| &p.beat) {
-                if row.contains_beat(beat) {
-                    draw_cursor(ctx, get_x, beat, row.y, &Color::NAVY, 3.0);
-                }
+            if let Some(beat) = data.music_playback_position.as_ref().map(|p| &p.beat)
+                && row.contains_beat(beat)
+            {
+                draw_cursor(ctx, get_x, beat, row.y, &Color::NAVY, 3.0);
             }
             // Draw hover cursor
-            if let Some(beat) = &self.hover_cursor {
-                if row.contains_beat(beat) {
-                    draw_cursor(ctx, get_x, beat, row.y, &Color::AQUA, 1.0);
-                }
+            if let Some(beat) = &self.hover_cursor
+                && row.contains_beat(beat)
+            {
+                draw_cursor(ctx, get_x, beat, row.y, &Color::AQUA, 1.0);
             }
 
             // Draw tracks
