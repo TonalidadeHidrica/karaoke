@@ -5,10 +5,10 @@ use std::iter::zip;
 use std::ops::DerefMut;
 use std::{collections::HashMap, path::PathBuf};
 
-use druid::piet::d2d::Bitmap as CoreGraphicsImage;
 use druid::PaintCtx;
-use druid::{piet::ImageFormat, RenderContext};
-use freetype::{face::LoadFlag, Bitmap, Library, RenderMode};
+use druid::piet::d2d::Bitmap as CoreGraphicsImage;
+use druid::{RenderContext, piet::ImageFormat};
+use freetype::{Bitmap, Library, RenderMode, face::LoadFlag};
 use fs_err::File;
 use itertools::Itertools;
 use rustybuzz::{GlyphInfo, GlyphPosition, UnicodeBuffer};

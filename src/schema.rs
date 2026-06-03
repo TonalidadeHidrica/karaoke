@@ -11,10 +11,10 @@ use std::path::PathBuf;
 
 use derive_more::From;
 use derive_new::new;
-use druid::im::OrdMap;
-use druid::im::Vector;
 use druid::Data;
 use druid::Lens;
+use druid::im::OrdMap;
+use druid::im::Vector;
 use itertools::Itertools;
 use num_bigint::BigInt;
 use num_rational::BigRational;
@@ -518,15 +518,15 @@ pub fn iterate_beat_times(
 mod test {
     use std::iter;
 
-    use super::beat_to_time;
-    use super::iterate_beat_times;
-    use super::iterate_measures;
     use super::BeatPosition;
     use super::Bpm;
     use super::MeasureLength;
+    use super::beat_to_time;
+    use super::iterate_beat_times;
+    use super::iterate_measures;
     use druid::im::ordmap;
-    use itertools::iterate;
     use itertools::Itertools;
+    use itertools::iterate;
     use num_rational::BigRational;
 
     macro_rules! bp {

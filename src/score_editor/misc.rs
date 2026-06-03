@@ -1,10 +1,10 @@
-use crate::schema::iterate_measures;
 use crate::schema::BeatLength;
 use crate::schema::BeatPosition;
 use crate::schema::ScoreElement;
 use crate::schema::ScoreElementKind;
-use itertools::iterate;
+use crate::schema::iterate_measures;
 use itertools::Itertools;
+use itertools::iterate;
 use num_rational::BigRational;
 
 use super::data::ScoreEditorData;

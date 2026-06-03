@@ -1,8 +1,3 @@
-use druid::text::Selection;
-use druid::widget::Button;
-use druid::widget::Controller;
-use druid::widget::Flex;
-use druid::widget::TextBox;
 use druid::Command;
 use druid::Env;
 use druid::Event;
@@ -12,6 +7,11 @@ use druid::LifeCycleCtx;
 use druid::Widget;
 use druid::WidgetExt;
 use druid::WidgetId;
+use druid::text::Selection;
+use druid::widget::Button;
+use druid::widget::Controller;
+use druid::widget::Flex;
+use druid::widget::TextBox;
 
 selector! { pub UPDATE_SELECTION_SELECTOR: Option<Selection> }
 selector! { pub SET_LYRICS_RANGE }

@@ -4,9 +4,9 @@ use anyhow::bail;
 use im::OrdMap;
 use num_rational::BigRational;
 use serde::{
+    Deserialize, Deserializer, Serialize, Serializer,
     de::{MapAccess, Visitor},
     ser::SerializeMap,
-    Deserialize, Deserializer, Serialize, Serializer,
 };
 
 pub fn serialize<K, V, S>(value: &OrdMap<K, V>, ser: S) -> Result<S::Ok, S::Error>

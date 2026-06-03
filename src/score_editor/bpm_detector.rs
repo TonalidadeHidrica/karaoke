@@ -1,12 +1,12 @@
+use druid::Data;
+use druid::Lens;
+use druid::Widget;
+use druid::WidgetExt;
 use druid::im::Vector;
 use druid::widget::Button;
 use druid::widget::Flex;
 use druid::widget::Label;
 use druid::widget::TextBox;
-use druid::Data;
-use druid::Lens;
-use druid::Widget;
-use druid::WidgetExt;
 
 use crate::linest::Linest;
 use crate::linest::LinestResult;

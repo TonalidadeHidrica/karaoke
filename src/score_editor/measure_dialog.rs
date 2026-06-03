@@ -1,15 +1,15 @@
+use druid::SingleUse;
+use druid::Widget;
+use druid::WidgetExt;
+use druid::WidgetId;
 use druid::text::ParseFormatter;
 use druid::widget::Button;
 use druid::widget::Flex;
 use druid::widget::Label;
 use druid::widget::TextBox;
-use druid::SingleUse;
-use druid::Widget;
-use druid::WidgetExt;
-use druid::WidgetId;
 
-use super::commands::SetMeasureLengthCommand;
 use super::commands::EDIT_MEAUSRE_LENGTH_SELECTOR;
+use super::commands::SetMeasureLengthCommand;
 use crate::druid_supplemental::widget_ext_ext::WidgetExtExt;
 use crate::schema::BeatPosition;
 use crate::schema::MeasureLength;

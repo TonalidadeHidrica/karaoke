@@ -5,9 +5,9 @@ use crate::schema::BeatLength;
 use crate::schema::BeatPosition;
 use crate::schema::Score;
 use derive_new::new;
-use druid::text::Selection;
 use druid::Data;
 use druid::Lens;
+use druid::text::Selection;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize, new, Data, Lens)]

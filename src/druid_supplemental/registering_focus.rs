@@ -1,8 +1,8 @@
-use druid::widget::Controller;
 use druid::Env;
 use druid::Event;
 use druid::EventCtx;
 use druid::Widget;
+use druid::widget::Controller;
 
 pub struct RegisterFocus;
 

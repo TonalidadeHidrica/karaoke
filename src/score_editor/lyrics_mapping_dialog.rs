@@ -1,16 +1,16 @@
 use std::{cell::RefCell, rc::Rc};
 
 use druid::{
+    Color, Event, EventCtx, KeyEvent, Modifiers, Rect, RenderContext, Size, Widget,
     keyboard_types::Key,
     kurbo::{Line, RoundedRect},
     piet::{Image, InterpolationMode},
-    Color, Event, EventCtx, KeyEvent, Modifiers, Rect, RenderContext, Size, Widget,
 };
 use itertools::Itertools;
 
 use super::ScoreEditorData;
 use crate::{
-    fonts::{render_text, FontLoader, RenderedText},
+    fonts::{FontLoader, RenderedText, render_text},
     linest::map_f64,
     schema::Lyrics,
 };

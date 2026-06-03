@@ -1,7 +1,7 @@
-use druid::widget::ControllerHost;
 use druid::Data;
 use druid::Widget;
 use druid::WidgetExt;
+use druid::widget::ControllerHost;
 
 use super::data_owner::DataOwner;
 use super::registering_focus::RegisterFocus;

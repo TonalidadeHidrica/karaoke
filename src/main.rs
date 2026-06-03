@@ -10,8 +10,8 @@ use karaoke::audio::AudioManager;
 use karaoke::config::Config;
 use karaoke::fonts::FontLoader;
 use karaoke::schema::Score;
-use karaoke::score_editor::build_toplevel_widget;
 use karaoke::score_editor::ScoreEditorData;
+use karaoke::score_editor::build_toplevel_widget;
 
 #[derive(Parser)]
 struct Args {
