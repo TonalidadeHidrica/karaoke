@@ -535,7 +535,7 @@ impl Widget<ScoreEditorData> for ScoreEditor {
                     row,
                     track_view,
                     track,
-                    data.selected_track.map_or(false, |j| track_view.index == j),
+                    data.selected_track == Some(track_view.index),
                     &draw_rect,
                 );
             }
@@ -605,7 +605,7 @@ impl ScoreEditor {
     fn edit_measure_length(&self, ctx: &mut EventCtx, data: &ScoreEditorData) {
         let cursor_position = data.cursor_position.to_owned();
         let (already_exsits, current_measure_length) =
-            match data.score.measure_lengths.range(..=&cursor_position).last() {
+            match data.score.measure_lengths.range(..=&cursor_position).next_back() {
                 None => (false, MeasureLength::default()),
                 Some((k, v)) => (k == &cursor_position, v.to_owned()),
             };
@@ -621,7 +621,7 @@ impl ScoreEditor {
 
     fn edit_bpm(&self, ctx: &mut EventCtx, data: &ScoreEditorData) {
         let cursor_position = data.cursor_position.to_owned();
-        let (already_exsits, current_bpm) = match data.score.bpms.range(..=&cursor_position).last()
+        let (already_exsits, current_bpm) = match data.score.bpms.range(..=&cursor_position).next_back()
         {
             None => (false, Bpm::default()),
             Some((k, v)) => (k == &cursor_position, *v),
