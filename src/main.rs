@@ -17,11 +17,13 @@ use karaoke::score_editor::build_toplevel_widget;
 struct Args {
     audio_path: PathBuf,
     save_path: Option<PathBuf>,
+    #[arg(long, default_value = "config.toml")]
+    config_path: PathBuf,
 }
 
 fn main() -> anyhow::Result<()> {
-    let config = Config::load()?;
     let args = Args::parse();
+    let config = Config::load(&args.config_path)?;
 
     let audio_manager = AudioManager::new()?;
     audio_manager

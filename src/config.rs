@@ -1,6 +1,6 @@
 use std::{
     io::{BufReader, Read},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use fs_err::File;
@@ -13,9 +13,9 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load() -> Result<Config, ConfigLoadError> {
+    pub fn load(path: &Path) -> Result<Config, ConfigLoadError> {
         let mut s = String::new();
-        BufReader::new(File::open("config.toml")?).read_to_string(&mut s)?;
+        BufReader::new(File::open(path)?).read_to_string(&mut s)?;
         Ok(toml::from_str(&s)?)
     }
 }
